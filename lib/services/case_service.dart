@@ -1,0 +1,145 @@
+import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+class CaseService {
+  final _supabase = Supabase.instance.client;
+
+  // ✅ Fetch all cases with Client name included
+  Future<List<Map<String, dynamic>>> getCases() async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return [];
+
+    final response = await _supabase
+        .from('cases')
+        .select('*, clients(name)')
+        .eq('user_id', userId)
+        .order('created_at', ascending: false);
+
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  // ✅ Fetch single case by ID
+  Future<Map<String, dynamic>?> getCaseById(String caseId) async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return null;
+
+    final response = await _supabase
+        .from('cases')
+        .select('*, clients(*)')
+        .eq('id', caseId)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+    return response;
+  }
+
+  // ✅ Add new Case directly to Supabase
+  Future<void> addCase({
+    required String clientId,
+    required String caseNumber,
+    required String title,
+    required String courtName,
+    required String caseType,
+    required String status,
+    DateTime? nextHearingDate,
+    String? oppositeParty,
+    String? notes,
+    String? judgeName,
+    String? currentStage,
+  }) async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) throw Exception("User not authenticated!");
+
+    final Map<String, dynamic> insertData = {
+      'user_id': userId,
+      'client_id': clientId,
+      'case_number': caseNumber,
+      'title': title,
+      'court_name': courtName,
+      'case_type': caseType,
+      'status': status,
+      // ✅ নতুন ফিল্ডগুলো যোগ করা হলো
+      'opposite_party': oppositeParty,
+      'notes': notes,
+      'judge_name': judgeName,
+      'current_stage': currentStage,
+    };
+
+    if (nextHearingDate != null) {
+      insertData['next_hearing_date'] = nextHearingDate.toIso8601String();
+    }
+
+    try {
+      await _supabase.from('cases').insert(insertData);
+      debugPrint('Case inserted successfully!');
+    } catch (e) {
+      debugPrint('Supabase Case Insert Error: $e');
+      rethrow;
+    }
+  }
+
+  // ✅ Update existing case
+  Future<void> updateCase({
+    required String caseId,
+    String? clientId,
+    String? caseNumber,
+    String? title,
+    String? courtName,
+    String? caseType,
+    String? status,
+    DateTime? nextHearingDate,
+    String? oppositeParty,
+    String? notes,
+    String? judgeName,
+    String? currentStage,
+  }) async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) throw Exception("User not authenticated!");
+
+    final Map<String, dynamic> updateData = {};
+
+    if (clientId != null) updateData['client_id'] = clientId;
+    if (caseNumber != null) updateData['case_number'] = caseNumber;
+    if (title != null) updateData['title'] = title;
+    if (courtName != null) updateData['court_name'] = courtName;
+    if (caseType != null) updateData['case_type'] = caseType;
+    if (status != null) updateData['status'] = status;
+    if (oppositeParty != null) updateData['opposite_party'] = oppositeParty;
+    if (notes != null) updateData['notes'] = notes;
+    if (judgeName != null) updateData['judge_name'] = judgeName;
+    if (currentStage != null) updateData['current_stage'] = currentStage;
+    if (nextHearingDate != null) {
+      updateData['next_hearing_date'] = nextHearingDate.toIso8601String();
+    }
+
+    try {
+      await _supabase
+          .from('cases')
+          .update(updateData)
+          .eq('id', caseId)
+          .eq('user_id', userId);
+      debugPrint('Case updated successfully!');
+    } catch (e) {
+      debugPrint('Supabase Case Update Error: $e');
+      rethrow;
+    }
+  }
+
+  // ✅ Delete case
+  Future<void> deleteCase(String caseId) async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) throw Exception("User not authenticated!");
+
+    try {
+      await _supabase
+          .from('cases')
+          .delete()
+          .eq('id', caseId)
+          .eq('user_id', userId);
+      debugPrint('Case deleted successfully!');
+    } catch (e) {
+      debugPrint('Supabase Case Delete Error: $e');
+      rethrow;
+    }
+  }
+}
