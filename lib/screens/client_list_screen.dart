@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/client_service.dart';
+import 'client_detail_screen.dart';
 
 class ClientListScreen extends StatefulWidget {
   const ClientListScreen({super.key});
@@ -80,6 +81,7 @@ class _ClientListScreenState extends State<ClientListScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: const Color(0xFF0F2C3E),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -87,10 +89,10 @@ class _ClientListScreenState extends State<ClientListScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) => Padding(
           padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
             left: 20,
             right: 20,
-            top: 20,
+            top: 16,
           ),
           child: Form(
             key: formKey,
@@ -327,7 +329,7 @@ class _ClientListScreenState extends State<ClientListScreen> {
     );
   }
 
-  // ✅ ক্লায়েন্ট কার্ড
+  // ✅ ক্লায়েন্ট কার্ড (onTap সহ)
   Widget _buildClientCard(Map<String, dynamic> client) {
     final name = client['name'] ?? 'নাম নেই';
     final phone = client['phone'] ?? '';
@@ -342,97 +344,113 @@ class _ClientListScreenState extends State<ClientListScreen> {
         borderRadius: BorderRadius.circular(14),
         side: const BorderSide(color: Colors.white12),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            // অ্যাভাটার
-            CircleAvatar(
-              radius: 26,
-              backgroundColor: const Color(0xFFE5B25D).withValues(alpha: 0.15),
-              child: Text(
-                name.isNotEmpty ? name[0].toUpperCase() : 'C',
-                style: const TextStyle(
-                  color: Color(0xFFE5B25D),
-                  fontWeight: FontWeight.bold,
-                  fontSize: 20,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () async {
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ClientDetailScreen(clientData: client),
+            ),
+          );
+          // ✅ এডিট বা ডিলিট হলে লিস্ট রিফ্রেশ
+          if (result == true) {
+            _fetchClients();
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              // অ্যাভাটার
+              CircleAvatar(
+                radius: 26,
+                backgroundColor:
+                    const Color(0xFFE5B25D).withValues(alpha: 0.15),
+                child: Text(
+                  name.isNotEmpty ? name[0].toUpperCase() : 'C',
+                  style: const TextStyle(
+                    color: Color(0xFFE5B25D),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 14),
+              const SizedBox(width: 14),
 
-            // তথ্য
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    name,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
+              // তথ্য
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (phone.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        const Icon(Icons.phone,
-                            color: Colors.white38, size: 12),
-                        const SizedBox(width: 4),
-                        Text(
-                          phone,
-                          style: const TextStyle(
-                              color: Colors.white70, fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ],
-                  if (email.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        const Icon(Icons.email,
-                            color: Colors.white38, size: 12),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            email,
+                    if (phone.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.phone,
+                              color: Colors.white38, size: 12),
+                          const SizedBox(width: 4),
+                          Text(
+                            phone,
                             style: const TextStyle(
                                 color: Colors.white70, fontSize: 12),
-                            overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
-                  if (address.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        const Icon(Icons.location_on,
-                            color: Colors.white38, size: 12),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            address,
-                            style: const TextStyle(
-                                color: Colors.white54, fontSize: 11),
-                            overflow: TextOverflow.ellipsis,
+                        ],
+                      ),
+                    ],
+                    if (email.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          const Icon(Icons.email,
+                              color: Colors.white38, size: 12),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              email,
+                              style: const TextStyle(
+                                  color: Colors.white70, fontSize: 12),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
+                    ],
+                    if (address.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          const Icon(Icons.location_on,
+                              color: Colors.white38, size: 12),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              address,
+                              style: const TextStyle(
+                                  color: Colors.white54, fontSize: 11),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
 
-            const Icon(Icons.arrow_forward_ios,
-                color: Colors.white38, size: 14),
-          ],
+              const Icon(Icons.arrow_forward_ios,
+                  color: Colors.white38, size: 14),
+            ],
+          ),
         ),
       ),
     );
