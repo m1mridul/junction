@@ -89,17 +89,29 @@ class _AddCaseScreenState extends State<AddCaseScreen> {
   // ✅ বাংলা মাস
   String _getBengaliMonth(int month) {
     const months = [
-      'জানুয়ারি', 'ফেব্রুয়ারি', 'মার্চ', 'এপ্রিল', 'মে', 'জুন',
-      'জুলাই', 'আগস্ট', 'সেপ্টেম্বর', 'অক্টোবর', 'নভেম্বর', 'ডিসেম্বর'
+      'জানুয়ারি',
+      'ফেব্রুয়ারি',
+      'মার্চ',
+      'এপ্রিল',
+      'মে',
+      'জুন',
+      'জুলাই',
+      'আগস্ট',
+      'সেপ্টেম্বর',
+      'অক্টোবর',
+      'নভেম্বর',
+      'ডিসেম্বর'
     ];
     return months[month - 1];
   }
 
   // ✅ তারিখ পিকার
+  // ✅ তারিখ ও সময় পিকার (একসাথে)
   Future<void> _pickHearingDate() async {
-    final picked = await showDatePicker(
+    // তারিখ পিকার
+    final pickedDate = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
+      initialDate: _selectedNextHearingDate ?? DateTime.now(),
       firstDate: DateTime.now(),
       lastDate: DateTime(2035),
       builder: (ctx, child) {
@@ -116,9 +128,45 @@ class _AddCaseScreenState extends State<AddCaseScreen> {
         );
       },
     );
-    if (picked != null) {
-      setState(() => _selectedNextHearingDate = picked);
-    }
+
+    if (pickedDate == null || !mounted) return;
+
+    // সময় পিকার
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: _selectedNextHearingDate != null
+          ? TimeOfDay(
+              hour: _selectedNextHearingDate!.hour,
+              minute: _selectedNextHearingDate!.minute,
+            )
+          : TimeOfDay.now(),
+      builder: (ctx, child) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: Color(0xFFE5B25D),
+              onPrimary: Color(0xFF032836),
+              surface: Color(0xFF0F2C3E),
+              onSurface: Colors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (pickedTime == null) return;
+
+    // তারিখ ও সময় একসাথে
+    setState(() {
+      _selectedNextHearingDate = DateTime(
+        pickedDate.year,
+        pickedDate.month,
+        pickedDate.day,
+        pickedTime.hour,
+        pickedTime.minute,
+      );
+    });
   }
 
   // ✅ সংরক্ষণ
@@ -251,7 +299,8 @@ class _AddCaseScreenState extends State<AddCaseScreen> {
                         TextFormField(
                           controller: _courtNameController,
                           style: const TextStyle(color: Colors.white),
-                          decoration: _inputDecoration('যেমন: ঢাকা জেলা জজ আদালত'),
+                          decoration:
+                              _inputDecoration('যেমন: ঢাকা জেলা জজ আদালত'),
                           validator: (val) => val == null || val.trim().isEmpty
                               ? 'আদালতের নাম লিখুন'
                               : null,
@@ -280,13 +329,13 @@ class _AddCaseScreenState extends State<AddCaseScreen> {
                               child: Text(opt['label']!),
                             );
                           }).toList(),
-                          onChanged: (val) => setState(
-                              () => _selectedStatus = val ?? 'Active'),
+                          onChanged: (val) =>
+                              setState(() => _selectedStatus = val ?? 'Active'),
                         ),
                         const SizedBox(height: 20),
 
                         // শুনানির তারিখ
-                        _buildSectionLabel('পরবর্তী শুনানির তারিখ'),
+                        _buildSectionLabel('পরবর্তী শুনানির তারিখ ও সময়'),
                         InkWell(
                           onTap: _pickHearingDate,
                           borderRadius: BorderRadius.circular(14),
@@ -305,8 +354,8 @@ class _AddCaseScreenState extends State<AddCaseScreen> {
                                 Expanded(
                                   child: Text(
                                     _selectedNextHearingDate == null
-                                        ? 'তারিখ নির্বাচন করুন'
-                                        : '${_selectedNextHearingDate!.day} ${_getBengaliMonth(_selectedNextHearingDate!.month)} ${_selectedNextHearingDate!.year}',
+                                        ? 'তারিখ ও সময় নির্বাচন করুন'
+                                        : '${_selectedNextHearingDate!.day} ${_getBengaliMonth(_selectedNextHearingDate!.month)} ${_selectedNextHearingDate!.year}, ${_selectedNextHearingDate!.hour}:${_selectedNextHearingDate!.minute.toString().padLeft(2, '0')}',
                                     style: TextStyle(
                                       color: _selectedNextHearingDate == null
                                           ? Colors.white54
@@ -384,8 +433,7 @@ class _AddCaseScreenState extends State<AddCaseScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.people_outline,
-                size: 80, color: Colors.white24),
+            const Icon(Icons.people_outline, size: 80, color: Colors.white24),
             const SizedBox(height: 16),
             const Text(
               'কোনো ক্লায়েন্ট নেই',

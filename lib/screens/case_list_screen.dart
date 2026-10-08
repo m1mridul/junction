@@ -369,16 +369,16 @@ class _CaseListScreenState extends State<CaseListScreen> {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
+        // ✅ এখানে পরিবর্তন: if (result == true) শর্ত সরিয়ে ফেলা হয়েছে
         onTap: () async {
-          final result = await Navigator.push(
+          await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => CaseDetailScreen(caseData: item),
             ),
           );
-          if (result == true) {
-            _fetchData();
-          }
+          // ✅ সবসময় লিস্ট রিফ্রেশ করো (এডিট, ডিলিট, শুনানি যোগ হলেও)
+          _fetchData();
         },
         child: Padding(
           padding: const EdgeInsets.all(14),

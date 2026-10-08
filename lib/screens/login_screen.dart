@@ -35,7 +35,6 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     }
   }
-
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -56,8 +55,31 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       if (mounted) {
+        // ✅ এরর মেসেজ পরিষ্কার করা
+        String errorMessage = 'লগইন ব্যর্থ হয়েছে।';
+        final errorStr = e.toString();
+
+        if (errorStr.contains('SocketException') ||
+            errorStr.contains('Failed host lookup') ||
+            errorStr.contains('No address associated with hostname')) {
+          errorMessage =
+              'ইন্টারনেট সংযোগ নেই। অনুগ্রহ করে ইন্টারনেট চালু করে আবার চেষ্টা করুন।';
+        } else if (errorStr.contains('Invalid login credentials')) {
+          errorMessage = 'ইমেইল বা পাসওয়ার্ড ভুল।';
+        } else if (errorStr.contains('Email not confirmed')) {
+          errorMessage = 'ইমেইল এখনো কনফার্ম করা হয়নি। ইমেইল চেক করুন।';
+        } else if (errorStr.contains('network')) {
+          errorMessage = 'নেটওয়ার্ক সমস্যা। আবার চেষ্টা করুন।';
+        } else {
+          errorMessage = 'লগইন ব্যর্থ: $e';
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('লগইন ব্যর্থ হয়েছে: ${e.toString()}')),
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.redAccent,
+            duration: const Duration(seconds: 4),
+          ),
         );
       }
     } finally {

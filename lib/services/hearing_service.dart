@@ -24,7 +24,7 @@ class HearingService {
     }
   }
 
-  // ✅ 2. Add hearing record & update next_hearing_date in cases table
+  // ✅ 2. Add hearing record
   Future<void> addHearing({
     required String caseId,
     required DateTime hearingDate,
@@ -38,26 +38,24 @@ class HearingService {
     final Map<String, dynamic> insertData = {
       'user_id': userId,
       'case_id': caseId,
-      'hearing_date': hearingDate.toIso8601String(),
+      'hearing_date': hearingDate.toUtc().toIso8601String(),
       'stage_note': stageNote,
       'court_order': courtOrder,
     };
 
     if (nextDate != null) {
-      insertData['next_date'] = nextDate.toIso8601String();
+      insertData['next_date'] = nextDate.toUtc().toIso8601String();
     }
 
     try {
-      // Hearing record insert
       await _supabase.from('hearing_history').insert(insertData);
 
-      // ✅ Automatic case's next_hearing_date update
       if (nextDate != null) {
         await _supabase
             .from('cases')
             .update({
-              'next_hearing_date': nextDate.toIso8601String(),
-              'updated_at': DateTime.now().toIso8601String(),
+              'next_hearing_date': nextDate.toUtc().toIso8601String(),
+              'updated_at': DateTime.now().toUtc().toIso8601String(),
             })
             .eq('id', caseId)
             .eq('user_id', userId);
@@ -74,6 +72,7 @@ class HearingService {
     String? stageNote,
     String? courtOrder,
     DateTime? nextDate,
+    DateTime? hearingDate,
   }) async {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) throw Exception("User not authenticated!");
@@ -81,7 +80,12 @@ class HearingService {
     final Map<String, dynamic> updateData = {};
     if (stageNote != null) updateData['stage_note'] = stageNote;
     if (courtOrder != null) updateData['court_order'] = courtOrder;
-    if (nextDate != null) updateData['next_date'] = nextDate.toIso8601String();
+    if (nextDate != null) {
+      updateData['next_date'] = nextDate.toUtc().toIso8601String();
+    }
+    if (hearingDate != null) {
+      updateData['hearing_date'] = hearingDate.toUtc().toIso8601String();
+    }
 
     if (updateData.isEmpty) return;
 
@@ -92,6 +96,25 @@ class HearingService {
           .eq('id', hearingId)
           .eq('user_id', userId);
       debugPrint('Hearing updated successfully!');
+
+      if (nextDate != null) {
+        final hearingRecord = await _supabase
+            .from('hearing_history')
+            .select('case_id')
+            .eq('id', hearingId)
+            .maybeSingle();
+
+        if (hearingRecord != null && hearingRecord['case_id'] != null) {
+          await _supabase
+              .from('cases')
+              .update({
+                'next_hearing_date': nextDate.toUtc().toIso8601String(),
+                'updated_at': DateTime.now().toUtc().toIso8601String(),
+              })
+              .eq('id', hearingRecord['case_id'])
+              .eq('user_id', userId);
+        }
+      }
     } catch (e) {
       debugPrint('Update Hearing Error: $e');
       rethrow;
@@ -112,6 +135,25 @@ class HearingService {
       debugPrint('Hearing deleted successfully!');
     } catch (e) {
       debugPrint('Delete Hearing Error: $e');
+      rethrow;
+    }
+  }
+
+  // ✅ 5. Get all hearings
+  Future<List<Map<String, dynamic>>> getAllHearings() async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return [];
+
+    try {
+      final response = await _supabase
+          .from('hearing_history')
+          .select('*, cases(case_number, title, court_name, case_type)')
+          .eq('user_id', userId)
+          .order('hearing_date', ascending: true);
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint('Fetch All Hearings Error: $e');
       rethrow;
     }
   }

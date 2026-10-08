@@ -66,7 +66,8 @@ class CaseService {
     };
 
     if (nextHearingDate != null) {
-      insertData['next_hearing_date'] = nextHearingDate.toIso8601String();
+      insertData['next_hearing_date'] =
+          nextHearingDate.toUtc().toIso8601String();
     }
 
     try {
@@ -109,7 +110,8 @@ class CaseService {
     if (judgeName != null) updateData['judge_name'] = judgeName;
     if (currentStage != null) updateData['current_stage'] = currentStage;
     if (nextHearingDate != null) {
-      updateData['next_hearing_date'] = nextHearingDate.toIso8601String();
+      updateData['next_hearing_date'] =
+          nextHearingDate.toUtc().toIso8601String();
     }
 
     try {

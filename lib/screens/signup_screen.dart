@@ -71,8 +71,28 @@ class _SignUpScreenState extends State<SignUpScreen> {
       }
     } catch (e) {
       if (mounted) {
+        String errorMessage = 'নিবন্ধন ব্যর্থ হয়েছে।';
+        final errorStr = e.toString();
+
+        if (errorStr.contains('SocketException') ||
+            errorStr.contains('Failed host lookup') ||
+            errorStr.contains('No address associated with hostname')) {
+          errorMessage =
+              'ইন্টারনেট সংযোগ নেই। অনুগ্রহ করে ইন্টারনেট চালু করে আবার চেষ্টা করুন।';
+        } else if (errorStr.contains('User already registered')) {
+          errorMessage = 'এই ইমেইল দিয়ে ইতিমধ্যে অ্যাকাউন্ট আছে।';
+        } else if (errorStr.contains('Password should be')) {
+          errorMessage = 'পাসওয়ার্ড খুব দুর্বল।';
+        } else {
+          errorMessage = 'নিবন্ধন ব্যর্থ: $e';
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('নিবন্ধন ব্যর্থ হয়েছে: ${e.toString()}')),
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.redAccent,
+            duration: const Duration(seconds: 4),
+          ),
         );
       }
     } finally {
