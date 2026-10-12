@@ -838,12 +838,11 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                   const SizedBox(height: 12),
                   const Divider(color: Colors.white12),
                   const SizedBox(height: 8),
-                  Row(
+                  const Row(
                     children: [
-                      const Icon(Icons.notes,
-                          color: Color(0xFFE5B25D), size: 14),
-                      const SizedBox(width: 6),
-                      const Text(
+                      Icon(Icons.notes, color: Color(0xFFE5B25D), size: 14),
+                      SizedBox(width: 6),
+                      Text(
                         'নোট:',
                         style: TextStyle(
                           color: Colors.white54,
@@ -892,115 +891,193 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     );
   }
 
-  // ✅ শুনানির সেকশন (history + upcoming)
+// ✅ শুনানির সেকশন (আসন্ন + ইতিহাস)
   Widget _buildHearingsSection() {
-    // ✅ যদি hearing_history খালি, কিন্তু next_hearing_date আছে
-    if (_hearings.isEmpty && _currentCaseData['next_hearing_date'] != null) {
-      return RefreshIndicator(
-        onRefresh: _fetchHearings,
-        color: const Color(0xFFE5B25D),
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // আসন্ন শুনানির কার্ড (cases থেকে)
-            Card(
-              color: const Color(0xFF0F2C3E),
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-                side: BorderSide(
-                  color: const Color(0xFFE5B25D).withValues(alpha: 0.4),
-                ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.event,
-                            color: Color(0xFFE5B25D), size: 16),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'আসন্ন শুনানি',
-                          style: TextStyle(
-                            color: Color(0xFFE5B25D),
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
-                        const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color:
-                                const Color(0xFFE5B25D).withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Text(
-                            'নির্ধারিত',
-                            style: TextStyle(
-                              color: Color(0xFFE5B25D),
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      _formatDate(_currentCaseData['next_hearing_date']),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'এখনো কোনো শুনানির রেকর্ড নেই। "+" বাটনে ট্যাপ করে শুনানির বিস্তারিত যোগ করুন।',
-                      style: TextStyle(color: Colors.white54, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
 
-    // ✅ যদি hearing_history খালি এবং next_hearing_date-ও নেই
-    if (_hearings.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.history, size: 64, color: Colors.white24),
-            SizedBox(height: 12),
-            Text(
-              'এখনো কোনো শুনানির রেকর্ড নেই',
-              style: TextStyle(color: Colors.white54, fontSize: 14),
-            ),
-          ],
-        ),
-      );
-    }
+    // ✅ hearing_history থেকে অতীত ও ভবিষ্যতের শুনানি আলাদা করা
+    final pastHearings = _hearings.where((h) {
+      final dateStr = h['hearing_date'];
+      if (dateStr == null) return false;
+      try {
+        final dt = DateTime.parse(dateStr).toLocal();
+        final hearingDay = DateTime(dt.year, dt.month, dt.day);
+        return hearingDay.isBefore(today) || hearingDay.isAtSameMomentAs(today);
+      } catch (_) {
+        return false;
+      }
+    }).toList();
 
-    // ✅ hearing_history আছে
+    final futureHearings = _hearings.where((h) {
+      final dateStr = h['hearing_date'];
+      if (dateStr == null) return false;
+      try {
+        final dt = DateTime.parse(dateStr).toLocal();
+        final hearingDay = DateTime(dt.year, dt.month, dt.day);
+        return hearingDay.isAfter(today);
+      } catch (_) {
+        return false;
+      }
+    }).toList();
+
+    final hasUpcomingFromCase = _currentCaseData['next_hearing_date'] != null;
+    final hasAnyUpcoming = hasUpcomingFromCase || futureHearings.isNotEmpty;
+
     return RefreshIndicator(
       onRefresh: _fetchHearings,
       color: const Color(0xFFE5B25D),
-      child: ListView.builder(
+      child: ListView(
         padding: const EdgeInsets.all(16),
-        itemCount: _hearings.length,
-        itemBuilder: (ctx, index) {
-          final hearing = _hearings[index];
-          return _buildHearingCard(hearing);
-        },
+        children: [
+          // ✅ আসন্ন শুনানি সেকশন (সবসময় দেখাবে)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8, left: 4),
+            child: Text(
+              'আসন্ন শুনানি',
+              style: TextStyle(
+                color: Color(0xFFE5B25D),
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+
+          // cases.next_hearing_date
+          if (hasUpcomingFromCase) ...[
+            _buildUpcomingHearingCard(),
+            const SizedBox(height: 8),
+          ],
+
+          // hearing_history থেকে ভবিষ্যতের শুনানি
+          ...futureHearings.map((hearing) => _buildHearingCard(hearing)),
+
+          // যদি কোনো আসন্ন শুনানি না থাকে
+          if (!hasAnyUpcoming)
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F2C3E).withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.white38, size: 18),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'কোনো আসন্ন শুনানির তারিখ নির্ধারিত নেই।',
+                      style: TextStyle(color: Colors.white54, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          const SizedBox(height: 24),
+
+          // ✅ শুনানির ইতিহাস সেকশন (সবসময় দেখাবে)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8, left: 4),
+            child: Text(
+              'শুনানির ইতিহাস',
+              style: TextStyle(
+                color: Color(0xFFE5B25D),
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+
+          // অতীতের শুনানি
+          if (pastHearings.isNotEmpty)
+            ...pastHearings.map((hearing) => _buildHearingCard(hearing))
+          else
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F2C3E).withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.white38, size: 18),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'এখনো কোনো অতীতের শুনানির রেকর্ড নেই।',
+                      style: TextStyle(color: Colors.white54, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+// ✅ আসন্ন শুনানির কার্ড
+  Widget _buildUpcomingHearingCard() {
+    final nextDate = _currentCaseData['next_hearing_date'];
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      color: const Color(0xFF0F2C3E),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+          color: const Color(0xFFE5B25D).withValues(alpha: 0.4),
+          width: 1.5,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            // আইকন
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE5B25D).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child:
+                  const Icon(Icons.event, color: Color(0xFFE5B25D), size: 20),
+            ),
+            const SizedBox(width: 12),
+            // তারিখ
+            Expanded(
+              child: Text(
+                _formatDate(nextDate),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            // নির্ধারিত ব্যাজ
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE5B25D).withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                'নির্ধারিত',
+                style: TextStyle(
+                  color: Color(0xFFE5B25D),
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
