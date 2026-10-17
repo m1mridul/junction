@@ -18,7 +18,6 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
   final CaseService _caseService = CaseService();
 
   late Map<String, dynamic> _currentCaseData;
-
   List<Map<String, dynamic>> _hearings = [];
   bool _isLoadingHearings = true;
 
@@ -27,6 +26,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     super.initState();
     _currentCaseData = Map<String, dynamic>.from(widget.caseData);
     _fetchHearings();
+    _fetchClientDetails(); // ✅ নতুন কল
   }
 
   // ✅ বাংলা মাস
@@ -63,6 +63,29 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     return '${dt.day} ${_getBengaliMonth(dt.month)} ${dt.year}, $hour:${dt.minute.toString().padLeft(2, '0')} টায়';
   }
 
+  // ✅ ক্লায়েন্টের নাম আনা (সরাসরি ডেটাবেস থেকে)
+  Future<void> _fetchClientDetails() async {
+    if (_currentCaseData['client_id'] != null) {
+      try {
+        // সরাসরি সার্ভিস থেকে ডেটা আনি
+        final clientData =
+            await _caseService.getClientById(_currentCaseData['client_id']);
+
+        if (clientData != null && mounted) {
+          setState(() {
+            _currentCaseData['clients'] = clientData;
+            // যদি এটি কাজ না করে, তবে সরাসরি নামটি সেট করে দিই
+            if (_currentCaseData['clients']?['name'] == null) {
+              _currentCaseData['clients'] = {'name': clientData['name']};
+            }
+          });
+        }
+      } catch (e) {
+        debugPrint('Error fetching client: $e');
+      }
+    }
+  }
+
   Future<void> _fetchHearings() async {
     setState(() => _isLoadingHearings = true);
     try {
@@ -70,8 +93,58 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
           await _hearingService.getHearingsByCaseId(_currentCaseData['id']);
       setState(() {
         _hearings = data;
-        _isLoadingHearings = false;
       });
+
+      // ✅ NEW LOGIC: next_hearing_date অটো-আপডেট
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+
+      if (_currentCaseData['next_hearing_date'] != null) {
+        final nextDt =
+            DateTime.parse(_currentCaseData['next_hearing_date']).toLocal();
+        final nextDay = DateTime(nextDt.year, nextDt.month, nextDt.day);
+
+        // যদি next_hearing_date অতীতে চলে যায়
+        if (nextDay.isBefore(today)) {
+          final futureHearings = data.where((h) {
+            final dateStr = h['hearing_date'];
+            if (dateStr == null) return false;
+            try {
+              final dt = DateTime.parse(dateStr).toLocal();
+              final hearingDay = DateTime(dt.year, dt.month, dt.day);
+              return hearingDay.isAfter(today) ||
+                  hearingDay.isAtSameMomentAs(today);
+            } catch (_) {
+              return false;
+            }
+          }).toList();
+
+          if (futureHearings.isNotEmpty) {
+            futureHearings.sort((a, b) {
+              final aDt = DateTime.parse(a['hearing_date']).toLocal();
+              final bDt = DateTime.parse(b['hearing_date']).toLocal();
+              return aDt.compareTo(bDt);
+            });
+
+            final newNextDate = futureHearings.first['hearing_date'];
+
+            await _caseService.updateCase(
+              caseId: _currentCaseData['id'],
+              nextHearingDate: DateTime.parse(newNextDate).toLocal(),
+            );
+
+            final updatedCase =
+                await _caseService.getCaseById(_currentCaseData['id']);
+            if (updatedCase != null && mounted) {
+              setState(() {
+                _currentCaseData = updatedCase;
+              });
+            }
+          }
+        }
+      }
+
+      setState(() => _isLoadingHearings = false);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -117,47 +190,14 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     }
   }
 
-  // ✅ কেস টাইপ অনুযায়ী আইকন
-  IconData _getCaseIcon(String caseType) {
-    switch (caseType) {
-      case 'দেওয়ানি':
-        return Icons.description;
-      case 'ফৌজদারি':
-        return Icons.gavel;
-      case 'পারিবারিক':
-        return Icons.family_restroom;
-      case 'জমি সংক্রান্ত':
-        return Icons.landscape;
-      default:
-        return Icons.folder;
-    }
-  }
-
-  Color _getCaseColor(String caseType) {
-    switch (caseType) {
-      case 'দেওয়ানি':
-        return Colors.orangeAccent;
-      case 'ফৌজদারি':
-        return Colors.redAccent;
-      case 'পারিবারিক':
-        return Colors.purpleAccent;
-      case 'জমি সংক্রান্ত':
-        return Colors.greenAccent;
-      default:
-        return const Color(0xFFE5B25D);
-    }
-  }
-
   // ✅ ডিলিট কনফার্মেশন
   Future<void> _confirmDelete() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF0F2C3E),
-        title: const Text(
-          'মামলা ডিলিট করবেন?',
-          style: TextStyle(color: Colors.white),
-        ),
+        title: const Text('মামলা ডিলিট করবেন?',
+            style: TextStyle(color: Colors.white)),
         content: const Text(
           'এই মামলাটি এবং এর সব শুনানির রেকর্ড স্থায়ীভাবে মুছে যাবে। এটি ফিরিয়ে আনা যাবে না।',
           style: TextStyle(color: Colors.white70),
@@ -165,17 +205,12 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text(
-              'বাতিল',
-              style: TextStyle(color: Colors.white54),
-            ),
+            child: const Text('বাতিল', style: TextStyle(color: Colors.white54)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'ডিলিট করুন',
-              style: TextStyle(color: Colors.redAccent),
-            ),
+            child: const Text('ডিলিট করুন',
+                style: TextStyle(color: Colors.redAccent)),
           ),
         ],
       ),
@@ -217,6 +252,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
           setState(() {
             _currentCaseData = updatedCase;
           });
+          _fetchClientDetails(); // ✅ ক্লায়েন্ট আবার লোড করি
         }
       } catch (e) {
         debugPrint('Error refreshing case: $e');
@@ -230,10 +266,8 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF0F2C3E),
-        title: const Text(
-          'শুনানি ডিলিট করবেন?',
-          style: TextStyle(color: Colors.white),
-        ),
+        title: const Text('শুনানি ডিলিট করবেন?',
+            style: TextStyle(color: Colors.white)),
         content: const Text(
           'এই শুনানির রেকর্ড স্থায়ীভাবে মুছে যাবে। এটি ফিরিয়ে আনা যাবে না।',
           style: TextStyle(color: Colors.white70),
@@ -241,17 +275,12 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text(
-              'বাতিল',
-              style: TextStyle(color: Colors.white54),
-            ),
+            child: const Text('বাতিল', style: TextStyle(color: Colors.white54)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'ডিলিট করুন',
-              style: TextStyle(color: Colors.redAccent),
-            ),
+            child: const Text('ডিলিট করুন',
+                style: TextStyle(color: Colors.redAccent)),
           ),
         ],
       ),
@@ -300,7 +329,6 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     final courtOrderController = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
-    // ✅ ১. তারিখ প্রি-ফিল: কেসের next_hearing_date অথবা বর্তমান সময়
     DateTime? selectedHearingDate;
     if (_currentCaseData['next_hearing_date'] != null) {
       try {
@@ -347,16 +375,13 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                       const Text(
                         'নতুন শুনানি যোগ করুন',
                         style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white),
                       ),
                     ],
                   ),
                   const SizedBox(height: 16),
-
-                  // ✅ শুনানির তারিখ ও সময়
                   _buildSheetSectionLabel('শুনানির তারিখ ও সময় *'),
                   InkWell(
                     onTap: () async {
@@ -385,8 +410,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                         initialTime: selectedHearingDate != null
                             ? TimeOfDay(
                                 hour: selectedHearingDate!.hour,
-                                minute: selectedHearingDate!.minute,
-                              )
+                                minute: selectedHearingDate!.minute)
                             : TimeOfDay.now(),
                         builder: (ctx, child) => Theme(
                           data: ThemeData.dark().copyWith(
@@ -445,8 +469,6 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-
-                  // স্টেজ / নোট
                   _buildSheetSectionLabel('স্টেজ / নোট *'),
                   TextFormField(
                     controller: stageNoteController,
@@ -457,8 +479,6 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                         : null,
                   ),
                   const SizedBox(height: 12),
-
-                  // কোর্ট অর্ডার
                   _buildSheetSectionLabel('আদালতের আদেশ'),
                   TextFormField(
                     controller: courtOrderController,
@@ -467,8 +487,6 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                     decoration: _inputDecoration('আদালতের আদেশ (ঐচ্ছিক)'),
                   ),
                   const SizedBox(height: 12),
-
-                  // পরবর্তী তারিখ
                   _buildSheetSectionLabel('পরবর্তী শুনানির তারিখ'),
                   InkWell(
                     onTap: () async {
@@ -497,8 +515,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                         initialTime: selectedNextDate != null
                             ? TimeOfDay(
                                 hour: selectedNextDate!.hour,
-                                minute: selectedNextDate!.minute,
-                              )
+                                minute: selectedNextDate!.minute)
                             : TimeOfDay.now(),
                         builder: (ctx, child) => Theme(
                           data: ThemeData.dark().copyWith(
@@ -562,8 +579,6 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-
-                  // সংরক্ষণ বাটন
                   SizedBox(
                     height: 48,
                     child: ElevatedButton(
@@ -571,8 +586,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                         backgroundColor: const Color(0xFFE5B25D),
                         foregroundColor: const Color(0xFF032836),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(24),
-                        ),
+                            borderRadius: BorderRadius.circular(24)),
                       ),
                       onPressed: isSaving
                           ? null
@@ -580,9 +594,8 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                               if (selectedHearingDate == null) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
-                                    content: Text(
-                                        'শুনানির তারিখ ও সময় নির্বাচন করুন'),
-                                  ),
+                                      content: Text(
+                                          'শুনানির তারিখ ও সময় নির্বাচন করুন')),
                                 );
                                 return;
                               }
@@ -609,9 +622,8 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                                 if (mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
-                                      content:
-                                          Text('শুনানি সফলভাবে যোগ হয়েছে'),
-                                    ),
+                                        content:
+                                            Text('শুনানি সফলভাবে যোগ হয়েছে')),
                                   );
                                 }
                               } catch (e) {
@@ -631,13 +643,9 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                               child: CircularProgressIndicator(
                                   strokeWidth: 2, color: Color(0xFF032836)),
                             )
-                          : const Text(
-                              'সংরক্ষণ করুন',
+                          : const Text('সংরক্ষণ করুন',
                               style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
+                                  fontWeight: FontWeight.bold, fontSize: 16)),
                     ),
                   ),
                 ],
@@ -655,10 +663,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
       child: Text(
         label,
         style: const TextStyle(
-          color: Colors.white70,
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-        ),
+            color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500),
       ),
     );
   }
@@ -668,17 +673,13 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
       labelText: label,
       labelStyle: const TextStyle(color: Colors.white70),
       enabledBorder: const OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.white30),
-      ),
+          borderSide: BorderSide(color: Colors.white30)),
       focusedBorder: const OutlineInputBorder(
-        borderSide: BorderSide(color: Color(0xFFE5B25D)),
-      ),
+          borderSide: BorderSide(color: Color(0xFFE5B25D))),
       errorBorder: const OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.redAccent),
-      ),
+          borderSide: BorderSide(color: Colors.redAccent)),
       focusedErrorBorder: const OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.redAccent),
-      ),
+          borderSide: BorderSide(color: Colors.redAccent)),
     );
   }
 
@@ -696,11 +697,9 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
             icon: const Icon(Icons.more_vert, color: Colors.white),
             color: const Color(0xFF0F2C3E),
             onSelected: (value) {
-              if (value == 'edit') {
+              if (value == 'edit')
                 _navigateToEdit();
-              } else if (value == 'delete') {
-                _confirmDelete();
-              }
+              else if (value == 'delete') _confirmDelete();
             },
             itemBuilder: (context) => [
               const PopupMenuItem<String>(
@@ -736,9 +735,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
             padding: const EdgeInsets.all(20),
             decoration: const BoxDecoration(
               color: Color(0xFF0F2C3E),
-              border: Border(
-                bottom: BorderSide(color: Colors.white12),
-              ),
+              border: Border(bottom: BorderSide(color: Colors.white12)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -749,10 +746,9 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                       child: Text(
                         _currentCaseData['title'] ?? 'শিরোনাম নেই',
                         style: const TextStyle(
-                          color: Color(0xFFE5B25D),
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
+                            color: Color(0xFFE5B25D),
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold),
                       ),
                     ),
                     Container(
@@ -765,22 +761,20 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                       child: Text(
                         statusLabel,
                         style: TextStyle(
-                          color: statusColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
+                            color: statusColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  'আদালত: ${_currentCaseData['court_name'] ?? 'নেই'}',
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
-                ),
+                Text('আদালত: ${_currentCaseData['court_name'] ?? 'নেই'}',
+                    style:
+                        const TextStyle(color: Colors.white70, fontSize: 13)),
                 const SizedBox(height: 4),
 
-                // ✅ ক্লায়েন্ট (না থাকলে মেসেজ)
+                // ✅ ক্লায়েন্ট (আপডেটেড লজিক)
                 Row(
                   children: [
                     const Icon(Icons.person, color: Colors.white38, size: 14),
@@ -788,20 +782,21 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                     Expanded(
                       child: Text(
                         'ক্লায়েন্ট: ${_currentCaseData['clients']?['name'] ?? 'যোগ করা হয়নি'}',
-                        style: const TextStyle(
-                            color: Colors.white70, fontSize: 13),
+                        style: TextStyle(
+                          color: _currentCaseData['clients']?['name'] != null
+                              ? Colors.white70
+                              : Colors.orangeAccent,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
+                    // ✅ client_id null হলেই কেবল "যোগ করুন" দেখাবে
                     if (_currentCaseData['client_id'] == null)
                       TextButton(
                         onPressed: _navigateToEdit,
-                        child: const Text(
-                          'যোগ করুন',
-                          style: TextStyle(
-                            color: Color(0xFFE5B25D),
-                            fontSize: 12,
-                          ),
-                        ),
+                        child: const Text('যোগ করুন',
+                            style: TextStyle(
+                                color: Color(0xFFE5B25D), fontSize: 12)),
                       ),
                   ],
                 ),
@@ -811,16 +806,14 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                         .toString()
                         .isNotEmpty) ...[
                   const SizedBox(height: 4),
-                  Text(
-                    'বিপক্ষ: ${_currentCaseData['opposite_party']}',
-                    style: const TextStyle(color: Colors.white70, fontSize: 13),
-                  ),
+                  Text('বিপক্ষ: ${_currentCaseData['opposite_party']}',
+                      style:
+                          const TextStyle(color: Colors.white70, fontSize: 13)),
                 ],
                 const SizedBox(height: 4),
-                Text(
-                  'মামলার ধরন: ${_currentCaseData['case_type'] ?? 'নেই'}',
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
-                ),
+                Text('মামলার ধরন: ${_currentCaseData['case_type'] ?? 'নেই'}',
+                    style:
+                        const TextStyle(color: Colors.white70, fontSize: 13)),
 
                 if (_currentCaseData['next_hearing_date'] != null) ...[
                   const SizedBox(height: 4),
@@ -842,14 +835,11 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                     children: [
                       Icon(Icons.notes, color: Color(0xFFE5B25D), size: 14),
                       SizedBox(width: 6),
-                      Text(
-                        'নোট:',
-                        style: TextStyle(
-                          color: Colors.white54,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      Text('নোট:',
+                          style: TextStyle(
+                              color: Colors.white54,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold)),
                     ],
                   ),
                   const SizedBox(height: 6),
@@ -860,21 +850,16 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                       color: const Color(0xFF07384A).withValues(alpha: 0.4),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Text(
-                      _currentCaseData['notes'],
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        height: 1.5,
-                      ),
-                    ),
+                    child: Text(_currentCaseData['notes'],
+                        style: const TextStyle(
+                            color: Colors.white, fontSize: 13, height: 1.5)),
                   ),
                 ],
               ],
             ),
           ),
 
-          // ✅ শুনানির ইতিহাস
+          // ✅ শুনানির সেকশন
           Expanded(
             child: _isLoadingHearings
                 ? const Center(
@@ -891,12 +876,11 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     );
   }
 
-// ✅ শুনানির সেকশন (আসন্ন + ইতিহাস)
+  // ✅ শুনানির সেকশন
   Widget _buildHearingsSection() {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
-    // ✅ hearing_history থেকে অতীত ও ভবিষ্যতের শুনানি আলাদা করা
     final pastHearings = _hearings.where((h) {
       final dateStr = h['hearing_date'];
       if (dateStr == null) return false;
@@ -921,7 +905,52 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
       }
     }).toList();
 
-    final hasUpcomingFromCase = _currentCaseData['next_hearing_date'] != null;
+    bool hasUpcomingFromCase = false;
+    DateTime? caseNextDate;
+    if (_currentCaseData['next_hearing_date'] != null) {
+      try {
+        caseNextDate =
+            DateTime.parse(_currentCaseData['next_hearing_date']).toLocal();
+        final nextDay =
+            DateTime(caseNextDate.year, caseNextDate.month, caseNextDate.day);
+        if (nextDay.isAtSameMomentAs(today) || nextDay.isAfter(today)) {
+          hasUpcomingFromCase = true;
+        }
+      } catch (_) {}
+    }
+
+    // ডুপ্লিকেট ফিল্টার
+    if (hasUpcomingFromCase && caseNextDate != null) {
+      final isDuplicate = futureHearings.any((h) {
+        final dateStr = h['hearing_date'];
+        if (dateStr == null) return false;
+        try {
+          final dt = DateTime.parse(dateStr).toLocal();
+          return dt.year == caseNextDate!.year &&
+              dt.month == caseNextDate!.month &&
+              dt.day == caseNextDate!.day;
+        } catch (_) {
+          return false;
+        }
+      });
+      if (isDuplicate) hasUpcomingFromCase = false;
+    }
+
+    final bool casePastDateNotInHistory = caseNextDate != null &&
+        caseNextDate.isBefore(today) &&
+        !_hearings.any((h) {
+          final dateStr = h['hearing_date'];
+          if (dateStr == null) return false;
+          try {
+            final dt = DateTime.parse(dateStr).toLocal();
+            return dt.year == caseNextDate!.year &&
+                dt.month == caseNextDate!.month &&
+                dt.day == caseNextDate!.day;
+          } catch (_) {
+            return false;
+          }
+        });
+
     final hasAnyUpcoming = hasUpcomingFromCase || futureHearings.isNotEmpty;
 
     return RefreshIndicator(
@@ -930,29 +959,19 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // ✅ আসন্ন শুনানি সেকশন (সবসময় দেখাবে)
           const Padding(
             padding: EdgeInsets.only(bottom: 8, left: 4),
-            child: Text(
-              'আসন্ন শুনানি',
-              style: TextStyle(
-                color: Color(0xFFE5B25D),
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            child: Text('আসন্ন শুনানি',
+                style: TextStyle(
+                    color: Color(0xFFE5B25D),
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold)),
           ),
-
-          // cases.next_hearing_date
           if (hasUpcomingFromCase) ...[
             _buildUpcomingHearingCard(),
             const SizedBox(height: 8),
           ],
-
-          // hearing_history থেকে ভবিষ্যতের শুনানি
           ...futureHearings.map((hearing) => _buildHearingCard(hearing)),
-
-          // যদি কোনো আসন্ন শুনানি না থাকে
           if (!hasAnyUpcoming)
             Container(
               padding: const EdgeInsets.all(14),
@@ -966,34 +985,84 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                   Icon(Icons.info_outline, color: Colors.white38, size: 18),
                   SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      'কোনো আসন্ন শুনানির তারিখ নির্ধারিত নেই।',
-                      style: TextStyle(color: Colors.white54, fontSize: 12),
-                    ),
-                  ),
+                      child: Text('কোনো আসন্ন শুনানির তারিখ নির্ধারিত নেই।',
+                          style:
+                              TextStyle(color: Colors.white54, fontSize: 12))),
                 ],
               ),
             ),
-
           const SizedBox(height: 24),
-
-          // ✅ শুনানির ইতিহাস সেকশন (সবসময় দেখাবে)
           const Padding(
             padding: EdgeInsets.only(bottom: 8, left: 4),
-            child: Text(
-              'শুনানির ইতিহাস',
-              style: TextStyle(
-                color: Color(0xFFE5B25D),
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
+            child: Text('শুনানির ইতিহাস',
+                style: TextStyle(
+                    color: Color(0xFFE5B25D),
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold)),
+          ),
+          if (casePastDateNotInHistory)
+            Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              color: const Color(0xFF0F2C3E).withValues(alpha: 0.8),
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+                side: const BorderSide(color: Colors.white12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.calendar_today,
+                            color: Color(0xFFE5B25D), size: 16),
+                        const SizedBox(width: 8),
+                        Text(
+                          _formatDate(_currentCaseData['next_hearing_date']),
+                          style: const TextStyle(
+                              color: Color(0xFFE5B25D),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13),
+                        ),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.white12,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text('পুরনো তারিখ',
+                              style: TextStyle(
+                                  color: Colors.white54,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text('স্টেজ / নোট:',
+                        style: TextStyle(
+                            color: Colors.white54,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'এই তারিখের বিস্তারিত তথ্য ডেটাবেসে সেভ করা হয়নি।',
+                      style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                          fontStyle: FontStyle.italic),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-
-          // অতীতের শুনানি
           if (pastHearings.isNotEmpty)
             ...pastHearings.map((hearing) => _buildHearingCard(hearing))
-          else
+          else if (!casePastDateNotInHistory)
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
@@ -1006,11 +1075,9 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                   Icon(Icons.info_outline, color: Colors.white38, size: 18),
                   SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      'এখনো কোনো অতীতের শুনানির রেকর্ড নেই।',
-                      style: TextStyle(color: Colors.white54, fontSize: 12),
-                    ),
-                  ),
+                      child: Text('এখনো কোনো অতীতের শুনানির রেকর্ড নেই।',
+                          style:
+                              TextStyle(color: Colors.white54, fontSize: 12))),
                 ],
               ),
             ),
@@ -1019,10 +1086,9 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     );
   }
 
-// ✅ আসন্ন শুনানির কার্ড
+  // ✅ আসন্ন শুনানির কার্ড
   Widget _buildUpcomingHearingCard() {
     final nextDate = _currentCaseData['next_hearing_date'];
-
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       color: const Color(0xFF0F2C3E),
@@ -1030,15 +1096,12 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-          color: const Color(0xFFE5B25D).withValues(alpha: 0.4),
-          width: 1.5,
-        ),
+            color: const Color(0xFFE5B25D).withValues(alpha: 0.4), width: 1.5),
       ),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Row(
           children: [
-            // আইকন
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
@@ -1049,32 +1112,24 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                   const Icon(Icons.event, color: Color(0xFFE5B25D), size: 20),
             ),
             const SizedBox(width: 12),
-            // তারিখ
             Expanded(
-              child: Text(
-                _formatDate(nextDate),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              child: Text(_formatDate(nextDate),
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold)),
             ),
-            // নির্ধারিত ব্যাজ
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
                 color: const Color(0xFFE5B25D).withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Text(
-                'নির্ধারিত',
-                style: TextStyle(
-                  color: Color(0xFFE5B25D),
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              child: const Text('নির্ধারিত',
+                  style: TextStyle(
+                      color: Color(0xFFE5B25D),
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -1089,6 +1144,19 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     final courtOrder = hearing['court_order'] ?? '';
     final nextDate = hearing['next_date'];
 
+    bool showNextDate = false;
+    if (nextDate != null) {
+      try {
+        final nextDt = DateTime.parse(nextDate).toLocal();
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        final nextDay = DateTime(nextDt.year, nextDt.month, nextDt.day);
+        if (nextDay.isAtSameMomentAs(today) || nextDay.isAfter(today)) {
+          showNextDate = true;
+        }
+      } catch (_) {}
+    }
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       color: const Color(0xFF0F2C3E),
@@ -1099,9 +1167,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        onTap: () {
-          _showHearingOptions(hearing);
-        },
+        onTap: () => _showHearingOptions(hearing),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
@@ -1112,50 +1178,39 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                   const Icon(Icons.calendar_today,
                       color: Color(0xFFE5B25D), size: 16),
                   const SizedBox(width: 8),
-                  Text(
-                    _formatDate(hearingDate),
-                    style: const TextStyle(
-                      color: Color(0xFFE5B25D),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                  ),
+                  Text(_formatDate(hearingDate),
+                      style: const TextStyle(
+                          color: Color(0xFFE5B25D),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13)),
                   const Spacer(),
                   const Icon(Icons.more_vert, color: Colors.white38, size: 18),
                 ],
               ),
               const SizedBox(height: 10),
               if (stageNote.isNotEmpty) ...[
-                const Text(
-                  'স্টেজ / নোট:',
-                  style: TextStyle(
-                      color: Colors.white54,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold),
-                ),
+                const Text('স্টেজ / নোট:',
+                    style: TextStyle(
+                        color: Colors.white54,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
-                Text(
-                  stageNote,
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                ),
+                Text(stageNote,
+                    style: const TextStyle(color: Colors.white, fontSize: 13)),
                 const SizedBox(height: 8),
               ],
               if (courtOrder.isNotEmpty) ...[
-                const Text(
-                  'আদালতের আদেশ:',
-                  style: TextStyle(
-                      color: Colors.white54,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold),
-                ),
+                const Text('আদালতের আদেশ:',
+                    style: TextStyle(
+                        color: Colors.white54,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
-                Text(
-                  courtOrder,
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                ),
+                Text(courtOrder,
+                    style: const TextStyle(color: Colors.white, fontSize: 13)),
                 const SizedBox(height: 8),
               ],
-              if (nextDate != null) ...[
+              if (showNextDate && nextDate != null) ...[
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
@@ -1167,14 +1222,11 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                       const Icon(Icons.arrow_forward,
                           color: Color(0xFFE5B25D), size: 14),
                       const SizedBox(width: 6),
-                      Text(
-                        'পরবর্তী তারিখ: ${_formatDate(nextDate)}',
-                        style: const TextStyle(
-                          color: Color(0xFFE5B25D),
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      Text('পরবর্তী তারিখ: ${_formatDate(nextDate)}',
+                          style: const TextStyle(
+                              color: Color(0xFFE5B25D),
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ),
@@ -1203,17 +1255,14 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
-              ),
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2)),
             ),
             const SizedBox(height: 16),
             ListTile(
               leading: const Icon(Icons.edit, color: Color(0xFFE5B25D)),
-              title: const Text(
-                'শুনানি এডিট করুন',
-                style: TextStyle(color: Colors.white),
-              ),
+              title: const Text('শুনানি এডিট করুন',
+                  style: TextStyle(color: Colors.white)),
               onTap: () {
                 Navigator.pop(ctx);
                 _navigateToEditHearing(hearing);
@@ -1221,10 +1270,8 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.delete, color: Colors.redAccent),
-              title: const Text(
-                'শুনানি ডিলিট করুন',
-                style: TextStyle(color: Colors.redAccent),
-              ),
+              title: const Text('শুনানি ডিলিট করুন',
+                  style: TextStyle(color: Colors.redAccent)),
               onTap: () {
                 Navigator.pop(ctx);
                 _confirmDeleteHearing(hearing);
