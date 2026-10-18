@@ -25,6 +25,10 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
   void initState() {
     super.initState();
     _currentCaseData = Map<String, dynamic>.from(widget.caseData);
+    // ✅ ডিবাগ প্রিন্ট ১
+    debugPrint('=== INIT STATE ===');
+    debugPrint('Client ID: ${_currentCaseData['client_id']}');
+    debugPrint('Clients object: ${_currentCaseData['clients']}');
     _fetchHearings();
     _fetchClientDetails(); // ✅ নতুন কল
   }
@@ -63,26 +67,29 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     return '${dt.day} ${_getBengaliMonth(dt.month)} ${dt.year}, $hour:${dt.minute.toString().padLeft(2, '0')} টায়';
   }
 
-  // ✅ ক্লায়েন্টের নাম আনা (সরাসরি ডেটাবেস থেকে)
   Future<void> _fetchClientDetails() async {
     if (_currentCaseData['client_id'] != null) {
       try {
-        // সরাসরি সার্ভিস থেকে ডেটা আনি
+        debugPrint('=== FETCHING CLIENT ===');
+        debugPrint('Searching for client ID: ${_currentCaseData['client_id']}');
+
         final clientData =
             await _caseService.getClientById(_currentCaseData['client_id']);
+
+        debugPrint('Client data from DB: $clientData'); // ✅ ডিবাগ প্রিন্ট ২
 
         if (clientData != null && mounted) {
           setState(() {
             _currentCaseData['clients'] = clientData;
-            // যদি এটি কাজ না করে, তবে সরাসরি নামটি সেট করে দিই
-            if (_currentCaseData['clients']?['name'] == null) {
-              _currentCaseData['clients'] = {'name': clientData['name']};
-            }
           });
+          debugPrint(
+              'Clients after setState: ${_currentCaseData['clients']}'); // ✅ ডিবাগ প্রিন্ট ৩
         }
       } catch (e) {
         debugPrint('Error fetching client: $e');
       }
+    } else {
+      debugPrint('Client ID is NULL'); // ✅ ডিবাগ প্রিন্ট ৪
     }
   }
 
