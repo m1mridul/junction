@@ -27,6 +27,11 @@ class _EditCaseScreenState extends State<EditCaseScreen> {
   String? _selectedClientId;
   late String _selectedCaseType;
   late String _selectedStatus;
+
+  // ✅ কেস ফাইলিং ডেট
+  DateTime? _selectedFilingDate;
+
+  // ✅ পরবর্তী শুনানির তারিখ
   DateTime? _selectedNextHearingDate;
 
   // ডেটা
@@ -71,7 +76,17 @@ class _EditCaseScreenState extends State<EditCaseScreen> {
     _selectedCaseType = widget.caseData['case_type'] ?? 'দেওয়ানি';
     _selectedStatus = widget.caseData['status'] ?? 'Active';
 
-    // তারিখ পার্স করা
+    // ✅ কেস ফাইলিং ডেট পার্স
+    if (widget.caseData['filing_date'] != null) {
+      try {
+        _selectedFilingDate =
+            DateTime.parse(widget.caseData['filing_date']).toLocal();
+      } catch (_) {
+        _selectedFilingDate = null;
+      }
+    }
+
+    // ✅ পরবর্তী শুনানির তারিখ পার্স
     if (widget.caseData['next_hearing_date'] != null) {
       try {
         _selectedNextHearingDate =
@@ -131,11 +146,38 @@ class _EditCaseScreenState extends State<EditCaseScreen> {
     return months[month - 1];
   }
 
-  Future<void> _pickHearingDate() async {
+  // ✅ কেস ফাইলিং ডেট পিকার (অতীতের তারিখও সিলেক্ট করা যাবে)
+  Future<void> _pickFilingDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedFilingDate ?? DateTime.now(),
+      firstDate: DateTime(2000), // ✅ অতীতের তারিখও সিলেক্ট করা যাবে
+      lastDate: DateTime.now(), // ✅ ভবিষ্যতের তারিখ সিলেক্ট করা যাবে না
+      builder: (ctx, child) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: Color(0xFFE5B25D),
+              onPrimary: Color(0xFF032836),
+              surface: Color(0xFF0F2C3E),
+              onSurface: Colors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() => _selectedFilingDate = picked);
+    }
+  }
+
+  // ✅ পরবর্তী শুনানির তারিখ পিকার (ভবিষ্যতের তারিখ)
+  Future<void> _pickNextHearingDate() async {
     final picked = await showDatePicker(
       context: context,
       initialDate: _selectedNextHearingDate ?? DateTime.now(),
-      firstDate: DateTime(2020),
+      firstDate: DateTime.now(), // ✅ ভবিষ্যতের তারিখ
       lastDate: DateTime(2035),
       builder: (ctx, child) {
         return Theme(
@@ -171,6 +213,7 @@ class _EditCaseScreenState extends State<EditCaseScreen> {
         caseType: _selectedCaseType,
         status: _selectedStatus,
         nextHearingDate: _selectedNextHearingDate,
+        filingDate: _selectedFilingDate, // ✅ নতুন
         oppositeParty: _oppositePartyController.text.trim(),
         notes: _notesController.text.trim(),
       );
@@ -179,7 +222,7 @@ class _EditCaseScreenState extends State<EditCaseScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('মামলা সফলভাবে আপডেট হয়েছে')),
         );
-        Navigator.pop(context, true); // ✅ true পাঠাই
+        Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
@@ -307,10 +350,48 @@ class _EditCaseScreenState extends State<EditCaseScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // শুনানির তারিখ
+                    // ✅ কেস ফাইলিং ডেট
+                    _buildSectionLabel('কেস ফাইলিং ডেট *'),
+                    InkWell(
+                      onTap: _pickFilingDate,
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 16),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.white30),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.description,
+                                color: Color(0xFFE5B25D), size: 20),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                _selectedFilingDate == null
+                                    ? 'তারিখ নির্বাচন করুন'
+                                    : '${_selectedFilingDate!.day} ${_getBengaliMonth(_selectedFilingDate!.month)} ${_selectedFilingDate!.year}',
+                                style: TextStyle(
+                                  color: _selectedFilingDate == null
+                                      ? Colors.white54
+                                      : Colors.white,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                            const Icon(Icons.edit,
+                                color: Colors.white38, size: 16),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // পরবর্তী শুনানির তারিখ
                     _buildSectionLabel('পরবর্তী শুনানির তারিখ'),
                     InkWell(
-                      onTap: _pickHearingDate,
+                      onTap: _pickNextHearingDate,
                       borderRadius: BorderRadius.circular(14),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
@@ -368,8 +449,7 @@ class _EditCaseScreenState extends State<EditCaseScreen> {
                           backgroundColor: const Color(0xFFE5B25D),
                           foregroundColor: const Color(0xFF032836),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(26),
-                          ),
+                              borderRadius: BorderRadius.circular(26)),
                         ),
                         onPressed: _isSaving ? null : _updateCase,
                         child: _isSaving
@@ -377,17 +457,11 @@ class _EditCaseScreenState extends State<EditCaseScreen> {
                                 height: 22,
                                 width: 22,
                                 child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Color(0xFF032836),
-                                ),
+                                    strokeWidth: 2, color: Color(0xFF032836)),
                               )
-                            : const Text(
-                                'আপডেট করুন',
+                            : const Text('আপডেট করুন',
                                 style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
+                                    fontWeight: FontWeight.bold, fontSize: 16)),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -404,10 +478,7 @@ class _EditCaseScreenState extends State<EditCaseScreen> {
       child: Text(
         label,
         style: const TextStyle(
-          color: Colors.white70,
-          fontSize: 13,
-          fontWeight: FontWeight.w500,
-        ),
+            color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500),
       ),
     );
   }
@@ -417,17 +488,13 @@ class _EditCaseScreenState extends State<EditCaseScreen> {
       hintText: hint,
       hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
       enabledBorder: const OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.white30),
-      ),
+          borderSide: BorderSide(color: Colors.white30)),
       focusedBorder: const OutlineInputBorder(
-        borderSide: BorderSide(color: Color(0xFFE5B25D)),
-      ),
+          borderSide: BorderSide(color: Color(0xFFE5B25D))),
       errorBorder: const OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.redAccent),
-      ),
+          borderSide: BorderSide(color: Colors.redAccent)),
       focusedErrorBorder: const OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.redAccent),
-      ),
+          borderSide: BorderSide(color: Colors.redAccent)),
     );
   }
 }

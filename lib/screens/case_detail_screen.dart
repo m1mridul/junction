@@ -25,7 +25,6 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
   @override
   void initState() {
     super.initState();
-    // ✅ widget.caseData থেকে সরাসরি client_id নিই
     _currentCaseData = Map<String, dynamic>.from(widget.caseData);
     _fetchHearings();
     _fetchClientName();
@@ -60,30 +59,37 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     }
   }
 
+  // ✅ ফাইলিং ডেটের জন্য আলাদা ফরম্যাট (UTC কনভার্ট ছাড়া)
+  String _formatFilingDate(String? isoDate) {
+    if (isoDate == null || isoDate.isEmpty) return 'নির্ধারিত হয়নি';
+    try {
+      // ✅ সরাসরি তারিখ পার্স করি (কোনো toLocal() নেই)
+      final dt = DateTime.parse(isoDate);
+      return '${dt.day} ${_getBengaliMonth(dt.month)} ${dt.year}';
+    } catch (_) {
+      return 'নির্ধারিত হয়নি';
+    }
+  }
+
   String _formatDateTime(DateTime dt) {
     final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
     return '${dt.day} ${_getBengaliMonth(dt.month)} ${dt.year}, $hour:${dt.minute.toString().padLeft(2, '0')} টায়';
   }
 
-  // ✅ ক্লায়েন্টের নাম আনা (সরাসরি widget.caseData থেকে)
+  // ✅ ক্লায়েন্টের নাম আনা
   Future<void> _fetchClientName() async {
     final clientId = widget.caseData['client_id'];
     if (clientId != null) {
       try {
         final clientData = await _caseService.getClientById(clientId);
-        debugPrint('Client Data from DB: $clientData');
-
         if (clientData != null && mounted) {
           setState(() {
             _clientName = clientData['name'];
           });
-          debugPrint('_clientName সেট হয়েছে: $_clientName');
         }
       } catch (e) {
         debugPrint('Error fetching client name: $e');
       }
-    } else {
-      debugPrint('client_id null in _fetchClientName');
     }
   }
 
@@ -272,10 +278,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
       ),
     );
     if (result == true && mounted) {
-      // ✅ শুনানির তালিকা রিফ্রেশ
       await _fetchHearings();
-
-      // ✅ কেস ডেটাও রিফ্রেশ (next_hearing_date আপডেটের জন্য)
       try {
         final updatedCase =
             await _caseService.getCaseById(_currentCaseData['id']);
@@ -296,7 +299,6 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     final courtOrderController = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
-    // ✅ ডিফল্ট তারিখ: কেসের next_hearing_date অথবা আজকের পর ৭ দিন
     DateTime? selectedHearingDate;
     if (_currentCaseData['next_hearing_date'] != null) {
       try {
@@ -306,7 +308,6 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
         selectedHearingDate = DateTime.now().add(const Duration(days: 7));
       }
     } else {
-      // ✅ নতুন শুনানিতে অতীতের তারিখ না আসার জন্য ৭ দিন পর
       selectedHearingDate = DateTime.now().add(const Duration(days: 7));
     }
 
@@ -358,10 +359,19 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                         context: context,
                         initialDate: selectedHearingDate ??
                             DateTime.now().add(const Duration(days: 7)),
-                        firstDate: DateTime
-                            .now(), // ✅ আজকের আগের তারিখ সিলেক্ট করা যাবে না
+                        firstDate: DateTime.now(),
                         lastDate: DateTime(2035),
-                        // ...
+                        builder: (ctx, child) => Theme(
+                          data: ThemeData.dark().copyWith(
+                            colorScheme: const ColorScheme.dark(
+                              primary: Color(0xFFE5B25D),
+                              onPrimary: Color(0xFF032836),
+                              surface: Color(0xFF0F2C3E),
+                              onSurface: Colors.white,
+                            ),
+                          ),
+                          child: child!,
+                        ),
                       );
 
                       if (pickedDate == null || !mounted) return;
@@ -595,7 +605,6 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                                 }
                               } finally {
                                 if (ctx.mounted) {
-                                  // ✅ চেক যোগ করুন
                                   setModalState(() => isSaving = false);
                                 }
                               }
@@ -737,7 +746,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                     style:
                         const TextStyle(color: Colors.white70, fontSize: 13)),
                 const SizedBox(height: 4),
-                // ✅ ক্লায়েন্ট (সরাসরি _clientName থেকে)
+                // ✅ ক্লায়েন্ট
                 Row(
                   children: [
                     const Icon(Icons.person, color: Colors.white38, size: 14),
@@ -775,13 +784,28 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                 Text('মামলার ধরন: ${_currentCaseData['case_type'] ?? 'নেই'}',
                     style:
                         const TextStyle(color: Colors.white70, fontSize: 13)),
-                if (_currentCaseData['next_hearing_date'] != null) ...[
+
+                // ✅ কেস ফাইলিং ডেট
+                if (_currentCaseData['filing_date'] != null) ...[
                   const SizedBox(height: 4),
                   Text(
-                    'ফাইলিং ডেট: ${_formatDate(_currentCaseData['filing_date'])}',
+                    'ফাইলিং ডেট: ${_formatFilingDate(_currentCaseData['filing_date'])}', // ✅ নতুন মেথড
                     style: const TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                 ],
+
+                // ✅ পরবর্তী শুনানি (ঠিক করা লেবেল)
+                if (_currentCaseData['next_hearing_date'] != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'পরবর্তী শুনানি: ${_formatDate(_currentCaseData['next_hearing_date'])}',
+                    style: const TextStyle(
+                        color: Color(0xFFE5B25D),
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold),
+                  ),
+                ],
+
                 if (_currentCaseData['notes'] != null &&
                     _currentCaseData['notes'].toString().isNotEmpty) ...[
                   const SizedBox(height: 12),

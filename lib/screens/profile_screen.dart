@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'edit_profile_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -67,6 +68,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('প্রোফাইল'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit, color: Color(0xFFE5B25D)),
+            onPressed: () async {
+              // ✅ এডিট স্ক্রিনে নেভিগেট
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => EditProfileScreen(
+                    profileData: {
+                      'full_name': _userName,
+                      'email': _userEmail,
+                      'phone': _userPhone,
+                      'address': _userAddress,
+                    },
+                  ),
+                ),
+              );
+              if (result == true && mounted) {
+                _fetchProfile(); // ✅ ফিরে এলে রিফ্রেশ
+              }
+            },
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(

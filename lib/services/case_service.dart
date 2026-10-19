@@ -4,7 +4,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class CaseService {
   final _supabase = Supabase.instance.client;
 
-  // ✅ ১. সব কেস আনা (client_id সহ)
   Future<List<Map<String, dynamic>>> getCases() async {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) return [];
@@ -18,7 +17,6 @@ class CaseService {
     final List<Map<String, dynamic>> cases =
         List<Map<String, dynamic>>.from(response);
 
-    // ক্লায়েন্টের নাম যুক্ত করি
     for (var i = 0; i < cases.length; i++) {
       final clientId = cases[i]['client_id'];
       if (clientId != null) {
@@ -39,7 +37,6 @@ class CaseService {
     return cases;
   }
 
-  // ✅ ২. একটি কেস আনা (client_id সহ)
   Future<Map<String, dynamic>?> getCaseById(String caseId) async {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) return null;
@@ -73,7 +70,6 @@ class CaseService {
     return caseData;
   }
 
-  // ✅ ৩. ক্লায়েন্টের বিস্তারিত
   Future<Map<String, dynamic>?> getClientById(String clientId) async {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) return null;
@@ -92,7 +88,6 @@ class CaseService {
     }
   }
 
-  // ✅ ৪. কেস অ্যাড
   Future<void> addCase({
     required String clientId,
     required String caseNumber,
@@ -101,7 +96,7 @@ class CaseService {
     required String caseType,
     required String status,
     DateTime? nextHearingDate,
-    DateTime? filingDate, // ✅ নতুন
+    DateTime? filingDate,
     String? oppositeParty,
     String? notes,
     String? judgeName,
@@ -128,6 +123,13 @@ class CaseService {
       insertData['next_hearing_date'] =
           nextHearingDate.toUtc().toIso8601String();
     }
+    // ✅ ফাইলিং ডেট
+    if (filingDate != null) {
+      // ✅ শুধু তারিখ (Date) হিসেবে সেভ করি, UTC কনভার্ট করি না
+      insertData['filing_date'] =
+          DateTime(filingDate.year, filingDate.month, filingDate.day)
+              .toIso8601String();
+    }
 
     try {
       await _supabase.from('cases').insert(insertData);
@@ -138,7 +140,6 @@ class CaseService {
     }
   }
 
-  // ✅ ৫. কেস আপডেট
   Future<void> updateCase({
     required String caseId,
     String? clientId,
@@ -148,7 +149,7 @@ class CaseService {
     String? caseType,
     String? status,
     DateTime? nextHearingDate,
-    DateTime? filingDate, // ✅ নতুন
+    DateTime? filingDate,
     String? oppositeParty,
     String? notes,
     String? judgeName,
@@ -172,6 +173,13 @@ class CaseService {
       updateData['next_hearing_date'] =
           nextHearingDate.toUtc().toIso8601String();
     }
+    // ✅ ফাইলিং ডেট
+    if (filingDate != null) {
+      // ✅ শুধু তারিখ (Date) হিসেবে সেভ করি, UTC কনভার্ট করি না
+      updateData['filing_date'] =
+          DateTime(filingDate.year, filingDate.month, filingDate.day)
+              .toIso8601String();
+    }
 
     try {
       await _supabase
@@ -186,7 +194,6 @@ class CaseService {
     }
   }
 
-  // ✅ ৬. কেস ডিলিট
   Future<void> deleteCase(String caseId) async {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) throw Exception("User not authenticated!");

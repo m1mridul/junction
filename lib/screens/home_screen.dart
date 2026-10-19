@@ -33,7 +33,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _fetchStats() async {
-    if (!mounted) return; // ✅ প্রথমে চেক
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
       final userId = _supabase.auth.currentUser?.id;
@@ -78,7 +78,6 @@ class _HomeScreenState extends State<HomeScreen> {
             .eq('status', 'Appealed');
 
         if (mounted) {
-          // ✅ await এর পরে চেক
           setState(() {
             _clientCount = (clientsResp as List).length;
             _activeCases = (activeResp as List).length;
@@ -100,10 +99,7 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       debugPrint("Error fetching dashboard stats: $e");
     } finally {
-      if (mounted) {
-        // ✅ finally-তেও চেক
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -120,7 +116,6 @@ class _HomeScreenState extends State<HomeScreen> {
             .limit(3);
 
         if (mounted) {
-          // ✅ await এর পরে চেক
           setState(() {
             _recentCases = List<Map<String, dynamic>>.from(resp);
           });
@@ -229,14 +224,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Law Junction'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout, color: Color(0xFFE5B25D)),
-            onPressed: () async {
-              await _supabase.auth.signOut();
-            },
-          ),
-        ],
       ),
       body: _isLoading
           ? const Center(
@@ -351,6 +338,45 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildStatCard({
+    required String title,
+    required String count,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F2C3E),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            backgroundColor: color.withValues(alpha: 0.2),
+            child: Icon(icon, color: color),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            count,
+            style: const TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            title,
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTotalCasesCard() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -361,6 +387,14 @@ class _HomeScreenState extends State<HomeScreen> {
           color: const Color(0xFFE5B25D).withValues(alpha: 0.3),
           width: 1.5,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFE5B25D).withValues(alpha: 0.15),
+            blurRadius: 12,
+            spreadRadius: 1,
+            offset: const Offset(0, 0),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -585,49 +619,15 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildStatCard({
-    required String title,
-    required String count,
-    required IconData icon,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0F2C3E),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CircleAvatar(
-            backgroundColor: color.withValues(alpha: 0.2),
-            child: Icon(icon, color: color),
-          ),
-          const SizedBox(height: 12),
-          Text(count,
-              style: const TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white)),
-          const SizedBox(height: 2),
-          Text(title,
-              style: const TextStyle(color: Colors.white70, fontSize: 13)),
-        ],
-      ),
-    );
-  }
-
   Widget _buildRecentCases() {
     if (_recentCases.isEmpty) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
+              const Text(
                 'সাম্প্রতিক মামলা',
                 style: TextStyle(
                   fontSize: 18,
