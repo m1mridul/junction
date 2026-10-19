@@ -56,6 +56,7 @@ class CalendarScreenState extends State<CalendarScreen> {
 
   // ✅ আজকের তারিখে রিসেট
   void resetToToday() {
+    if (!mounted) return;
     setState(() {
       _selectedDate = DateTime.now();
       _currentMonth = DateTime.now();
@@ -64,14 +65,22 @@ class CalendarScreenState extends State<CalendarScreen> {
     _fetchAllHearings();
   }
 
+  // ✅ সব শুনানি আনা (hearing_history + cases.next_hearing_date)
   Future<void> _fetchAllHearings() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
+
     try {
+      // ১. hearing_history থেকে সব শুনানি
       final hearingData = await _hearingService.getAllHearings();
+
+      // ২. cases থেকে সব কেস (next_hearing_date সহ)
       final caseData = await _caseService.getCases();
 
+      // ৩. উভয় সোর্স একত্রিত করা
       final List<Map<String, dynamic>> combinedHearings = [];
 
+      // hearing_history থেকে
       for (final h in hearingData) {
         combinedHearings.add({
           'id': h['id'],
@@ -85,6 +94,7 @@ class CalendarScreenState extends State<CalendarScreen> {
         });
       }
 
+      // cases থেকে next_hearing_date
       for (final c in caseData) {
         if (c['next_hearing_date'] != null) {
           combinedHearings.add({
@@ -105,23 +115,27 @@ class CalendarScreenState extends State<CalendarScreen> {
         }
       }
 
-      setState(() {
-        _allHearings = combinedHearings;
-        _isLoading = false;
+      if (mounted) {
+        setState(() {
+          _allHearings = combinedHearings;
+          _isLoading = false;
+        });
         _filterHearingsForDate(_selectedDate);
-      });
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('শুনানি লোড ব্যর্থ: $e')),
         );
+        setState(() => _isLoading = false);
       }
-      setState(() => _isLoading = false);
     }
   }
 
-  // ✅ নির্দিষ্ট তারিখের শুনানি ফিল্টার
+  // ✅ নির্দিষ্ট তারিখের শুনানি ফিল্টার (ডুপ্লিকেট ফিল্টার সহ)
   void _filterHearingsForDate(DateTime date) {
+    if (!mounted) return;
+
     final filtered = _allHearings.where((h) {
       final hearingDate = h['hearing_date'];
       if (hearingDate == null) return false;
@@ -153,6 +167,7 @@ class CalendarScreenState extends State<CalendarScreen> {
         seen.add(key);
         uniqueHearings.add(h);
       } else {
+        // history কে প্রাধান্য দেওয়া
         if (h['source'] == 'history') {
           final index = uniqueHearings.indexWhere((item) {
             final itemCaseId = item['case_id'] ?? '';
@@ -171,9 +186,11 @@ class CalendarScreenState extends State<CalendarScreen> {
       }
     }
 
-    setState(() {
-      _selectedDateHearings = uniqueHearings;
-    });
+    if (mounted) {
+      setState(() {
+        _selectedDateHearings = uniqueHearings;
+      });
+    }
   }
 
   // ✅ কেস টাইপ অনুযায়ী আইকন
@@ -212,14 +229,13 @@ class CalendarScreenState extends State<CalendarScreen> {
     return '${date.day} ${_bengaliMonths[date.month - 1]} ${date.year}';
   }
 
-  // ✅ সময় ফরম্যাট ঠিক করা হয়েছে
+  // ✅ সময় ফরম্যাট
   String _formatTime(String? isoDate) {
     if (isoDate == null || isoDate.isEmpty) return '';
     try {
       final dt = DateTime.parse(isoDate).toLocal();
       final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
-      final period = dt.hour >= 12 ? 'টায়' : 'টায়';
-      return '$hour:${dt.minute.toString().padLeft(2, '0')} $period';
+      return '$hour:${dt.minute.toString().padLeft(2, '0')} টায়';
     } catch (_) {
       return '';
     }
@@ -258,6 +274,7 @@ class CalendarScreenState extends State<CalendarScreen> {
   }
 
   void _changeMonth(int delta) {
+    if (!mounted) return;
     setState(() {
       _currentMonth =
           DateTime(_currentMonth.year, _currentMonth.month + delta, 1);
@@ -278,9 +295,7 @@ class CalendarScreenState extends State<CalendarScreen> {
               child: Text(
                 'আপনার সকল তারিখ ও শুনানির সময়সূচি',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.6),
-                  fontSize: 12,
-                ),
+                    color: Colors.white.withValues(alpha: 0.6), fontSize: 12),
               ),
             ),
           ),
@@ -291,7 +306,7 @@ class CalendarScreenState extends State<CalendarScreen> {
               child: CircularProgressIndicator(color: Color(0xFFE5B25D)))
           : Column(
               children: [
-                // ✅ ক্যালেন্ডার সেকশন (সম্পূর্ণ)
+                // ✅ ক্যালেন্ডার সেকশন
                 Container(
                   margin:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -314,7 +329,6 @@ class CalendarScreenState extends State<CalendarScreen> {
                   ),
                   child: Column(
                     children: [
-                      // মাস নেভিগেশন
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -343,8 +357,6 @@ class CalendarScreenState extends State<CalendarScreen> {
                         ],
                       ),
                       const SizedBox(height: 6),
-
-                      // সপ্তাহের দিন
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: List.generate(7, (i) {
@@ -363,14 +375,11 @@ class CalendarScreenState extends State<CalendarScreen> {
                         }),
                       ),
                       const SizedBox(height: 4),
-
-                      // তারিখ গ্রিড
                       _buildCalendarGrid(),
                     ],
                   ),
                 ),
-
-                // ✅ "আজকের কার্যসূচি" সেকশন
+                // ✅ আজকের কার্যসূচি
                 Expanded(
                   child: Container(
                     color: const Color(0xFF032836),
@@ -396,28 +405,22 @@ class CalendarScreenState extends State<CalendarScreen> {
                                 onTap: () {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
-                                      content: Text(
-                                          'সব শুনানি দেখার ফিচার শীঘ্রই আসছে'),
-                                    ),
+                                        content: Text(
+                                            'সব শুনানি দেখার ফিচার শীঘ্রই আসছে')),
                                   );
                                 },
                                 child: Row(
                                   children: [
-                                    const Text(
-                                      'সব দেখুন',
-                                      style: TextStyle(
-                                        color: Color(0xFFE5B25D),
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
+                                    const Text('সব দেখুন',
+                                        style: TextStyle(
+                                            color: Color(0xFFE5B25D),
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500)),
                                     const SizedBox(width: 4),
-                                    Icon(
-                                      Icons.arrow_forward_ios,
-                                      color: const Color(0xFFE5B25D)
-                                          .withValues(alpha: 0.7),
-                                      size: 12,
-                                    ),
+                                    Icon(Icons.arrow_forward_ios,
+                                        color: const Color(0xFFE5B25D)
+                                            .withValues(alpha: 0.7),
+                                        size: 12),
                                   ],
                                 ),
                               ),
@@ -433,12 +436,10 @@ class CalendarScreenState extends State<CalendarScreen> {
                                       Icon(Icons.event_busy,
                                           size: 64, color: Colors.white24),
                                       SizedBox(height: 12),
-                                      Text(
-                                        'এই দিনে কোনো শুনানি নেই',
-                                        style: TextStyle(
-                                            color: Colors.white54,
-                                            fontSize: 14),
-                                      ),
+                                      Text('এই দিনে কোনো শুনানি নেই',
+                                          style: TextStyle(
+                                              color: Colors.white54,
+                                              fontSize: 14)),
                                     ],
                                   ),
                                 )
@@ -470,7 +471,6 @@ class CalendarScreenState extends State<CalendarScreen> {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
-  // ✅ ক্যালেন্ডার গ্রিড
   Widget _buildCalendarGrid() {
     final firstDayOfMonth =
         DateTime(_currentMonth.year, _currentMonth.month, 1);
@@ -580,7 +580,6 @@ class CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  // ✅ শুনানির কার্ড
   Widget _buildHearingCard(Map<String, dynamic> hearing) {
     final caseData = hearing['cases'] as Map<String, dynamic>?;
     final caseNumber = caseData?['case_number'] ?? '';
@@ -610,16 +609,31 @@ class CalendarScreenState extends State<CalendarScreen> {
         borderRadius: BorderRadius.circular(14),
         onTap: () async {
           if (caseData != null) {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => CaseDetailScreen(caseData: {
-                  'id': hearing['case_id'],
-                  ...caseData,
-                }),
-              ),
-            );
-            _fetchAllHearings();
+            // ✅ ডেটাবেস থেকে সম্পূর্ণ কেস ডেটা (client_id সহ) নিয়ে আসি
+            final fullCaseData =
+                await _caseService.getCaseById(hearing['case_id']);
+
+            if (fullCaseData != null && mounted) {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CaseDetailScreen(caseData: fullCaseData),
+                ),
+              );
+              _fetchAllHearings();
+            } else {
+              // ফলব্যাক
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CaseDetailScreen(caseData: {
+                    'id': hearing['case_id'],
+                    ...caseData,
+                  }),
+                ),
+              );
+              _fetchAllHearings();
+            }
           }
         },
         child: Padding(

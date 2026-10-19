@@ -66,7 +66,7 @@ class HearingService {
     }
   }
 
-  // ✅ 3. Update hearing record
+// ✅ 3. Update hearing record
   Future<void> updateHearing({
     required String hearingId,
     String? stageNote,
@@ -80,16 +80,15 @@ class HearingService {
     final Map<String, dynamic> updateData = {};
     if (stageNote != null) updateData['stage_note'] = stageNote;
     if (courtOrder != null) updateData['court_order'] = courtOrder;
-    if (nextDate != null) {
+    if (nextDate != null)
       updateData['next_date'] = nextDate.toUtc().toIso8601String();
-    }
-    if (hearingDate != null) {
+    if (hearingDate != null)
       updateData['hearing_date'] = hearingDate.toUtc().toIso8601String();
-    }
 
     if (updateData.isEmpty) return;
 
     try {
+      // ✅ ১. hearing_history আপডেট
       await _supabase
           .from('hearing_history')
           .update(updateData)
@@ -97,6 +96,7 @@ class HearingService {
           .eq('user_id', userId);
       debugPrint('Hearing updated successfully!');
 
+      // ✅ ২. hearing থেকে case_id বের করে cases.next_hearing_date আপডেট
       if (nextDate != null) {
         final hearingRecord = await _supabase
             .from('hearing_history')
@@ -113,6 +113,47 @@ class HearingService {
               })
               .eq('id', hearingRecord['case_id'])
               .eq('user_id', userId);
+        }
+      }
+
+      // ✅ ৩. hearing থেকে case_id বের করে cases.next_hearing_date NULL করি (যদি nextDate null হয়)
+      if (nextDate == null) {
+        final hearingRecord = await _supabase
+            .from('hearing_history')
+            .select('case_id')
+            .eq('id', hearingId)
+            .maybeSingle();
+
+        if (hearingRecord != null && hearingRecord['case_id'] != null) {
+          // সবচেয়ে কাছের ভবিষ্যতের তারিখ খুঁজি
+          final futureHearings = await _supabase
+              .from('hearing_history')
+              .select('hearing_date')
+              .eq('case_id', hearingRecord['case_id'])
+              .eq('user_id', userId)
+              .gt('hearing_date', DateTime.now().toUtc().toIso8601String())
+              .order('hearing_date', ascending: true)
+              .limit(1);
+
+          if (futureHearings.isNotEmpty) {
+            await _supabase
+                .from('cases')
+                .update({
+                  'next_hearing_date': futureHearings.first['hearing_date'],
+                  'updated_at': DateTime.now().toUtc().toIso8601String(),
+                })
+                .eq('id', hearingRecord['case_id'])
+                .eq('user_id', userId);
+          } else {
+            await _supabase
+                .from('cases')
+                .update({
+                  'next_hearing_date': null,
+                  'updated_at': DateTime.now().toUtc().toIso8601String(),
+                })
+                .eq('id', hearingRecord['case_id'])
+                .eq('user_id', userId);
+          }
         }
       }
     } catch (e) {

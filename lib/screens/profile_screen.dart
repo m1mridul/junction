@@ -24,7 +24,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _fetchProfile() async {
+    if (!mounted) return; // ✅ প্রথমে চেক
     setState(() => _isLoading = true);
+
     try {
       final userId = _supabase.auth.currentUser?.id;
       if (userId != null) {
@@ -34,19 +36,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
             .eq('id', userId)
             .maybeSingle();
 
-        setState(() {
-          if (resp != null) {
-            _userName = resp['full_name'] ?? 'অ্যাডভোকেট';
-            _userEmail = resp['email'] ?? '';
-            _userPhone = resp['phone'] ?? '';
-            _userAddress = resp['address'] ?? '';
-          }
-        });
+        if (mounted) {
+          // ✅ await এর পরে আবার চেক
+          setState(() {
+            if (resp != null) {
+              _userName = resp['full_name'] ?? 'অ্যাডভোকেট';
+              _userEmail = resp['email'] ?? '';
+              _userPhone = resp['phone'] ?? '';
+              _userAddress = resp['address'] ?? '';
+            }
+          });
+        }
       }
     } catch (e) {
       debugPrint("Error fetching profile: $e");
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        // ✅ শেষে আবার চেক
+        setState(() => _isLoading = false);
+      }
     }
   }
 

@@ -22,23 +22,6 @@ class _CaseListScreenState extends State<CaseListScreen> {
   List<Map<String, dynamic>> _clients = [];
   bool _isLoading = true;
 
-  // ✅ ডেটাবেসের মান অনুযায়ী
-  final List<String> _caseTypes = [
-    'দেওয়ানি',
-    'ফৌজদারি',
-    'পারিবারিক',
-    'জমি সংক্রান্ত',
-    'অন্যান্য',
-  ];
-
-  final List<Map<String, String>> _statusOptions = [
-    {'value': 'Active', 'label': 'চলমান'},
-    {'value': 'Pending', 'label': 'বিচারাধীন'},
-    {'value': 'Disposed', 'label': 'নিষ্পত্তি'},
-    {'value': 'Closed', 'label': 'বন্ধ'},
-    {'value': 'Appealed', 'label': 'আপিলকৃত'},
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -52,28 +35,35 @@ class _CaseListScreenState extends State<CaseListScreen> {
   }
 
   Future<void> _fetchData() async {
+    if (!mounted) return; // ✅ ১. প্রথমে চেক
     setState(() => _isLoading = true);
+
     try {
       final caseData = await _caseService.getCases();
       final clientData = await _clientService.getClients();
-      setState(() {
-        _cases = caseData;
-        _filteredCases = caseData;
-        _clients = clientData;
-        _isLoading = false;
-      });
+
+      if (mounted) {
+        // ✅ ২. await এর পরে চেক
+        setState(() {
+          _cases = caseData;
+          _filteredCases = caseData;
+          _clients = clientData;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
       if (mounted) {
+        // ✅ ৩. catch ব্লকেও চেক
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('মামলা লোড ব্যর্থ: $e')),
         );
+        setState(() => _isLoading = false);
       }
-      setState(() => _isLoading = false);
     }
   }
 
-  // ✅ সার্চ ফিল্টার
   void _filterCases(String query) {
+    if (!mounted) return; // ✅ চেক
     setState(() {
       if (query.isEmpty) {
         _filteredCases = _cases;
@@ -91,7 +81,6 @@ class _CaseListScreenState extends State<CaseListScreen> {
     });
   }
 
-  // ✅ কেস টাইপ অনুযায়ী আইকন
   IconData _getCaseIcon(String caseType) {
     switch (caseType) {
       case 'দেওয়ানি':
@@ -107,7 +96,6 @@ class _CaseListScreenState extends State<CaseListScreen> {
     }
   }
 
-  // ✅ কেস টাইপ অনুযায়ী কালার
   Color _getCaseColor(String caseType) {
     switch (caseType) {
       case 'দেওয়ানি':
@@ -123,7 +111,6 @@ class _CaseListScreenState extends State<CaseListScreen> {
     }
   }
 
-  // ✅ স্ট্যাটাস লেবেল
   String _getStatusLabel(String status) {
     switch (status) {
       case 'Active':
@@ -141,7 +128,6 @@ class _CaseListScreenState extends State<CaseListScreen> {
     }
   }
 
-  // ✅ স্ট্যাটাস কালার
   Color _getStatusColor(String status) {
     switch (status) {
       case 'Active':
@@ -159,7 +145,6 @@ class _CaseListScreenState extends State<CaseListScreen> {
     }
   }
 
-  // ✅ বাংলা মাস
   String _getBengaliMonth(int month) {
     const months = [
       'জানুয়ারি',
@@ -188,36 +173,27 @@ class _CaseListScreenState extends State<CaseListScreen> {
     }
   }
 
-  // ✅ নতুন স্ক্রিনে নেভিগেট
   void _navigateToAddCase() async {
-    // ক্লায়েন্ট না থাকলে ক্লায়েন্ট স্ক্রিনে পাঠান
     if (_clients.isEmpty) {
       final goToClients = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
           backgroundColor: const Color(0xFF0F2C3E),
-          title: const Text(
-            'ক্লায়েন্ট প্রয়োজন',
-            style: TextStyle(color: Colors.white),
-          ),
+          title: const Text('ক্লায়েন্ট প্রয়োজন',
+              style: TextStyle(color: Colors.white)),
           content: const Text(
-            'মামলা যোগ করার আগে অন্তত একজন ক্লায়েন্ট যোগ করুন।',
-            style: TextStyle(color: Colors.white70),
-          ),
+              'মামলা যোগ করার আগে অন্তত একজন ক্লায়েন্ট যোগ করুন।',
+              style: TextStyle(color: Colors.white70)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text(
-                'বাতিল',
-                style: TextStyle(color: Colors.white54),
-              ),
+              child:
+                  const Text('বাতিল', style: TextStyle(color: Colors.white54)),
             ),
             TextButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text(
-                'ক্লায়েন্ট যোগ করুন',
-                style: TextStyle(color: Color(0xFFE5B25D)),
-              ),
+              child: const Text('ক্লায়েন্ট যোগ করুন',
+                  style: TextStyle(color: Color(0xFFE5B25D))),
             ),
           ],
         ),
@@ -228,40 +204,20 @@ class _CaseListScreenState extends State<CaseListScreen> {
           context,
           MaterialPageRoute(builder: (_) => const ClientListScreen()),
         );
-        _fetchData(); // ক্লায়েন্ট যোগের পর কেস লিস্ট রিফ্রেশ
+        _fetchData();
       }
       return;
     }
 
-    // ✅ AddCaseScreen-এ নেভিগেট
     final result = await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const AddCaseScreen()),
     );
 
-    // ✅ কেস সেভ হলে লিস্ট রিফ্রেশ
-    if (result == true) {
+    if (result == true && mounted) {
+      // ✅ চেক
       _fetchData();
     }
-  }
-
-  InputDecoration _inputDecoration(String label) {
-    return InputDecoration(
-      labelText: label,
-      labelStyle: const TextStyle(color: Colors.white70),
-      enabledBorder: const OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.white30),
-      ),
-      focusedBorder: const OutlineInputBorder(
-        borderSide: BorderSide(color: Color(0xFFE5B25D)),
-      ),
-      errorBorder: const OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.redAccent),
-      ),
-      focusedErrorBorder: const OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.redAccent),
-      ),
-    );
   }
 
   @override
@@ -275,7 +231,6 @@ class _CaseListScreenState extends State<CaseListScreen> {
               child: CircularProgressIndicator(color: Color(0xFFE5B25D)))
           : Column(
               children: [
-                // ✅ সার্চ বার
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: TextField(
@@ -298,8 +253,6 @@ class _CaseListScreenState extends State<CaseListScreen> {
                     ),
                   ),
                 ),
-
-                // ✅ কেস লিস্ট
                 Expanded(
                   child: _filteredCases.isEmpty
                       ? Center(
@@ -343,7 +296,6 @@ class _CaseListScreenState extends State<CaseListScreen> {
     );
   }
 
-  // ✅ ডিজাইনের মতো কেস কার্ড
   Widget _buildCaseCard(Map<String, dynamic> item) {
     final caseType = item['case_type'] ?? 'অন্যান্য';
     final caseNumber = item['case_number'] ?? '';
@@ -369,22 +321,22 @@ class _CaseListScreenState extends State<CaseListScreen> {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        // ✅ এখানে পরিবর্তন: if (result == true) শর্ত সরিয়ে ফেলা হয়েছে
         onTap: () async {
+          // ✅ সরাসরি item পাঠাই (getCaseById কল করব না)
           await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => CaseDetailScreen(caseData: item),
             ),
           );
-          // ✅ সবসময় লিস্ট রিফ্রেশ করো (এডিট, ডিলিট, শুনানি যোগ হলেও)
-          _fetchData();
+          if (mounted) {
+            _fetchData();
+          }
         },
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Row(
             children: [
-              // আইকন
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -394,8 +346,6 @@ class _CaseListScreenState extends State<CaseListScreen> {
                 child: Icon(icon, color: iconColor, size: 22),
               ),
               const SizedBox(width: 12),
-
-              // তথ্য
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

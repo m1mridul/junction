@@ -4,7 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class CaseService {
   final _supabase = Supabase.instance.client;
 
-  // ✅ Fetch all cases with Client name (Manual Join)
+  // ✅ ১. সব কেস আনা (client_id সহ)
   Future<List<Map<String, dynamic>>> getCases() async {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) return [];
@@ -18,7 +18,7 @@ class CaseService {
     final List<Map<String, dynamic>> cases =
         List<Map<String, dynamic>>.from(response);
 
-    // ✅ ম্যানুয়ালি ক্লায়েন্টের নাম যুক্ত করা
+    // ক্লায়েন্টের নাম যুক্ত করি
     for (var i = 0; i < cases.length; i++) {
       final clientId = cases[i]['client_id'];
       if (clientId != null) {
@@ -28,7 +28,6 @@ class CaseService {
               .select('name')
               .eq('id', clientId)
               .maybeSingle();
-
           if (clientResponse != null) {
             cases[i]['clients'] = clientResponse;
           }
@@ -37,16 +36,14 @@ class CaseService {
         }
       }
     }
-
     return cases;
   }
 
-  // ✅ Fetch single case by ID (Manual Join)
+  // ✅ ২. একটি কেস আনা (client_id সহ)
   Future<Map<String, dynamic>?> getCaseById(String caseId) async {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) return null;
 
-    // ১. আগে কেস ডেটা আনি
     final response = await _supabase
         .from('cases')
         .select()
@@ -56,9 +53,8 @@ class CaseService {
 
     if (response == null) return null;
 
-    final Map<String, dynamic> caseData = response;
+    final Map<String, dynamic> caseData = Map<String, dynamic>.from(response);
 
-    // ২. ম্যানুয়ালি ক্লায়েন্টের নাম যুক্ত করি
     final clientId = caseData['client_id'];
     if (clientId != null) {
       try {
@@ -67,7 +63,6 @@ class CaseService {
             .select()
             .eq('id', clientId)
             .maybeSingle();
-
         if (clientResponse != null) {
           caseData['clients'] = clientResponse;
         }
@@ -75,11 +70,10 @@ class CaseService {
         debugPrint('Error fetching client: $e');
       }
     }
-
     return caseData;
   }
 
-  // ✅ নির্দিষ্ট ক্লায়েন্টের বিস্তারিত আনা
+  // ✅ ৩. ক্লায়েন্টের বিস্তারিত
   Future<Map<String, dynamic>?> getClientById(String clientId) async {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) return null;
@@ -91,7 +85,6 @@ class CaseService {
           .eq('id', clientId)
           .eq('user_id', userId)
           .maybeSingle();
-
       return response;
     } catch (e) {
       debugPrint('Fetch Client Error: $e');
@@ -99,7 +92,7 @@ class CaseService {
     }
   }
 
-  // ✅ Add new Case directly to Supabase
+  // ✅ ৪. কেস অ্যাড
   Future<void> addCase({
     required String clientId,
     required String caseNumber,
@@ -108,6 +101,7 @@ class CaseService {
     required String caseType,
     required String status,
     DateTime? nextHearingDate,
+    DateTime? filingDate, // ✅ নতুন
     String? oppositeParty,
     String? notes,
     String? judgeName,
@@ -144,7 +138,7 @@ class CaseService {
     }
   }
 
-  // ✅ Update existing case
+  // ✅ ৫. কেস আপডেট
   Future<void> updateCase({
     required String caseId,
     String? clientId,
@@ -154,6 +148,7 @@ class CaseService {
     String? caseType,
     String? status,
     DateTime? nextHearingDate,
+    DateTime? filingDate, // ✅ নতুন
     String? oppositeParty,
     String? notes,
     String? judgeName,
@@ -163,7 +158,6 @@ class CaseService {
     if (userId == null) throw Exception("User not authenticated!");
 
     final Map<String, dynamic> updateData = {};
-
     if (clientId != null) updateData['client_id'] = clientId;
     if (caseNumber != null) updateData['case_number'] = caseNumber;
     if (title != null) updateData['title'] = title;
@@ -192,7 +186,7 @@ class CaseService {
     }
   }
 
-  // ✅ Delete case
+  // ✅ ৬. কেস ডিলিট
   Future<void> deleteCase(String caseId) async {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) throw Exception("User not authenticated!");

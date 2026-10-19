@@ -18,19 +18,17 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
   final CaseService _caseService = CaseService();
 
   late Map<String, dynamic> _currentCaseData;
+  String? _clientName;
   List<Map<String, dynamic>> _hearings = [];
   bool _isLoadingHearings = true;
 
   @override
   void initState() {
     super.initState();
+    // ✅ widget.caseData থেকে সরাসরি client_id নিই
     _currentCaseData = Map<String, dynamic>.from(widget.caseData);
-    // ✅ ডিবাগ প্রিন্ট ১
-    debugPrint('=== INIT STATE ===');
-    debugPrint('Client ID: ${_currentCaseData['client_id']}');
-    debugPrint('Clients object: ${_currentCaseData['clients']}');
     _fetchHearings();
-    _fetchClientDetails(); // ✅ নতুন কল
+    _fetchClientName();
   }
 
   // ✅ বাংলা মাস
@@ -67,98 +65,47 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     return '${dt.day} ${_getBengaliMonth(dt.month)} ${dt.year}, $hour:${dt.minute.toString().padLeft(2, '0')} টায়';
   }
 
-  Future<void> _fetchClientDetails() async {
-    if (_currentCaseData['client_id'] != null) {
+  // ✅ ক্লায়েন্টের নাম আনা (সরাসরি widget.caseData থেকে)
+  Future<void> _fetchClientName() async {
+    final clientId = widget.caseData['client_id'];
+    if (clientId != null) {
       try {
-        debugPrint('=== FETCHING CLIENT ===');
-        debugPrint('Searching for client ID: ${_currentCaseData['client_id']}');
-
-        final clientData =
-            await _caseService.getClientById(_currentCaseData['client_id']);
-
-        debugPrint('Client data from DB: $clientData'); // ✅ ডিবাগ প্রিন্ট ২
+        final clientData = await _caseService.getClientById(clientId);
+        debugPrint('Client Data from DB: $clientData');
 
         if (clientData != null && mounted) {
           setState(() {
-            _currentCaseData['clients'] = clientData;
+            _clientName = clientData['name'];
           });
-          debugPrint(
-              'Clients after setState: ${_currentCaseData['clients']}'); // ✅ ডিবাগ প্রিন্ট ৩
+          debugPrint('_clientName সেট হয়েছে: $_clientName');
         }
       } catch (e) {
-        debugPrint('Error fetching client: $e');
+        debugPrint('Error fetching client name: $e');
       }
     } else {
-      debugPrint('Client ID is NULL'); // ✅ ডিবাগ প্রিন্ট ৪
+      debugPrint('client_id null in _fetchClientName');
     }
   }
 
   Future<void> _fetchHearings() async {
+    if (!mounted) return;
     setState(() => _isLoadingHearings = true);
     try {
       final data =
           await _hearingService.getHearingsByCaseId(_currentCaseData['id']);
-      setState(() {
-        _hearings = data;
-      });
-
-      // ✅ NEW LOGIC: next_hearing_date অটো-আপডেট
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-
-      if (_currentCaseData['next_hearing_date'] != null) {
-        final nextDt =
-            DateTime.parse(_currentCaseData['next_hearing_date']).toLocal();
-        final nextDay = DateTime(nextDt.year, nextDt.month, nextDt.day);
-
-        // যদি next_hearing_date অতীতে চলে যায়
-        if (nextDay.isBefore(today)) {
-          final futureHearings = data.where((h) {
-            final dateStr = h['hearing_date'];
-            if (dateStr == null) return false;
-            try {
-              final dt = DateTime.parse(dateStr).toLocal();
-              final hearingDay = DateTime(dt.year, dt.month, dt.day);
-              return hearingDay.isAfter(today) ||
-                  hearingDay.isAtSameMomentAs(today);
-            } catch (_) {
-              return false;
-            }
-          }).toList();
-
-          if (futureHearings.isNotEmpty) {
-            futureHearings.sort((a, b) {
-              final aDt = DateTime.parse(a['hearing_date']).toLocal();
-              final bDt = DateTime.parse(b['hearing_date']).toLocal();
-              return aDt.compareTo(bDt);
-            });
-
-            final newNextDate = futureHearings.first['hearing_date'];
-
-            await _caseService.updateCase(
-              caseId: _currentCaseData['id'],
-              nextHearingDate: DateTime.parse(newNextDate).toLocal(),
-            );
-
-            final updatedCase =
-                await _caseService.getCaseById(_currentCaseData['id']);
-            if (updatedCase != null && mounted) {
-              setState(() {
-                _currentCaseData = updatedCase;
-              });
-            }
-          }
-        }
+      if (mounted) {
+        setState(() {
+          _hearings = data;
+          _isLoadingHearings = false;
+        });
       }
-
-      setState(() => _isLoadingHearings = false);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('শুনানির ইতিহাস লোড ব্যর্থ: $e')),
         );
+        setState(() => _isLoadingHearings = false);
       }
-      setState(() => _isLoadingHearings = false);
     }
   }
 
@@ -259,7 +206,6 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
           setState(() {
             _currentCaseData = updatedCase;
           });
-          _fetchClientDetails(); // ✅ ক্লায়েন্ট আবার লোড করি
         }
       } catch (e) {
         debugPrint('Error refreshing case: $e');
@@ -326,7 +272,21 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
       ),
     );
     if (result == true && mounted) {
-      _fetchHearings();
+      // ✅ শুনানির তালিকা রিফ্রেশ
+      await _fetchHearings();
+
+      // ✅ কেস ডেটাও রিফ্রেশ (next_hearing_date আপডেটের জন্য)
+      try {
+        final updatedCase =
+            await _caseService.getCaseById(_currentCaseData['id']);
+        if (updatedCase != null && mounted) {
+          setState(() {
+            _currentCaseData = updatedCase;
+          });
+        }
+      } catch (e) {
+        debugPrint('Error refreshing case: $e');
+      }
     }
   }
 
@@ -336,16 +296,18 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     final courtOrderController = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
+    // ✅ ডিফল্ট তারিখ: কেসের next_hearing_date অথবা আজকের পর ৭ দিন
     DateTime? selectedHearingDate;
     if (_currentCaseData['next_hearing_date'] != null) {
       try {
         selectedHearingDate =
             DateTime.parse(_currentCaseData['next_hearing_date']).toLocal();
       } catch (_) {
-        selectedHearingDate = DateTime.now();
+        selectedHearingDate = DateTime.now().add(const Duration(days: 7));
       }
     } else {
-      selectedHearingDate = DateTime.now();
+      // ✅ নতুন শুনানিতে অতীতের তারিখ না আসার জন্য ৭ দিন পর
+      selectedHearingDate = DateTime.now().add(const Duration(days: 7));
     }
 
     DateTime? selectedNextDate;
@@ -394,20 +356,12 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                     onTap: () async {
                       final pickedDate = await showDatePicker(
                         context: context,
-                        initialDate: selectedHearingDate ?? DateTime.now(),
-                        firstDate: DateTime(2020),
+                        initialDate: selectedHearingDate ??
+                            DateTime.now().add(const Duration(days: 7)),
+                        firstDate: DateTime
+                            .now(), // ✅ আজকের আগের তারিখ সিলেক্ট করা যাবে না
                         lastDate: DateTime(2035),
-                        builder: (ctx, child) => Theme(
-                          data: ThemeData.dark().copyWith(
-                            colorScheme: const ColorScheme.dark(
-                              primary: Color(0xFFE5B25D),
-                              onPrimary: Color(0xFF032836),
-                              surface: Color(0xFF0F2C3E),
-                              onSurface: Colors.white,
-                            ),
-                          ),
-                          child: child!,
-                        ),
+                        // ...
                       );
 
                       if (pickedDate == null || !mounted) return;
@@ -640,7 +594,10 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                                   );
                                 }
                               } finally {
-                                setModalState(() => isSaving = false);
+                                if (ctx.mounted) {
+                                  // ✅ চেক যোগ করুন
+                                  setModalState(() => isSaving = false);
+                                }
                               }
                             },
                       child: isSaving
@@ -780,25 +737,23 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                     style:
                         const TextStyle(color: Colors.white70, fontSize: 13)),
                 const SizedBox(height: 4),
-
-                // ✅ ক্লায়েন্ট (আপডেটেড লজিক)
+                // ✅ ক্লায়েন্ট (সরাসরি _clientName থেকে)
                 Row(
                   children: [
                     const Icon(Icons.person, color: Colors.white38, size: 14),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
-                        'ক্লায়েন্ট: ${_currentCaseData['clients']?['name'] ?? 'যোগ করা হয়নি'}',
+                        'ক্লায়েন্ট: ${_clientName ?? 'যোগ করা হয়নি'}',
                         style: TextStyle(
-                          color: _currentCaseData['clients']?['name'] != null
+                          color: _clientName != null
                               ? Colors.white70
                               : Colors.orangeAccent,
                           fontSize: 13,
                         ),
                       ),
                     ),
-                    // ✅ client_id null হলেই কেবল "যোগ করুন" দেখাবে
-                    if (_currentCaseData['client_id'] == null)
+                    if (_clientName == null)
                       TextButton(
                         onPressed: _navigateToEdit,
                         child: const Text('যোগ করুন',
@@ -807,7 +762,6 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                       ),
                   ],
                 ),
-
                 if (_currentCaseData['opposite_party'] != null &&
                     _currentCaseData['opposite_party']
                         .toString()
@@ -821,18 +775,13 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                 Text('মামলার ধরন: ${_currentCaseData['case_type'] ?? 'নেই'}',
                     style:
                         const TextStyle(color: Colors.white70, fontSize: 13)),
-
                 if (_currentCaseData['next_hearing_date'] != null) ...[
                   const SizedBox(height: 4),
                   Text(
-                    'পরবর্তী শুনানি: ${_formatDate(_currentCaseData['next_hearing_date'])}',
-                    style: const TextStyle(
-                        color: Color(0xFFE5B25D),
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold),
+                    'ফাইলিং ডেট: ${_formatDate(_currentCaseData['filing_date'])}',
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                 ],
-
                 if (_currentCaseData['notes'] != null &&
                     _currentCaseData['notes'].toString().isNotEmpty) ...[
                   const SizedBox(height: 12),
@@ -865,7 +814,6 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
               ],
             ),
           ),
-
           // ✅ শুনানির সেকশন
           Expanded(
             child: _isLoadingHearings
@@ -926,7 +874,6 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
       } catch (_) {}
     }
 
-    // ডুপ্লিকেট ফিল্টার
     if (hasUpcomingFromCase && caseNextDate != null) {
       final isDuplicate = futureHearings.any((h) {
         final dateStr = h['hearing_date'];
@@ -1057,12 +1004,11 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                             fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
                     const Text(
-                      'এই তারিখের বিস্তারিত তথ্য ডেটাবেসে সেভ করা হয়নি।',
-                      style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 13,
-                          fontStyle: FontStyle.italic),
-                    ),
+                        'এই তারিখের বিস্তারিত তথ্য ডেটাবেসে সেভ করা হয়নি।',
+                        style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                            fontStyle: FontStyle.italic)),
                   ],
                 ),
               ),
@@ -1093,7 +1039,6 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     );
   }
 
-  // ✅ আসন্ন শুনানির কার্ড
   Widget _buildUpcomingHearingCard() {
     final nextDate = _currentCaseData['next_hearing_date'];
     return Card(
@@ -1144,7 +1089,6 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     );
   }
 
-  // ✅ শুনানির কার্ড
   Widget _buildHearingCard(Map<String, dynamic> hearing) {
     final hearingDate = hearing['hearing_date'];
     final stageNote = hearing['stage_note'] ?? '';
@@ -1245,7 +1189,6 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     );
   }
 
-  // ✅ শুনানির অপশন ডায়ালগ
   void _showHearingOptions(Map<String, dynamic> hearing) {
     showModalBottomSheet(
       context: context,
