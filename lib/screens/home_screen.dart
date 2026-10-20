@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'case_list_screen.dart';
-import 'client_list_screen.dart';
+import 'case_detail_screen.dart'; // ✅ নতুন ইমপোর্ট
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -209,7 +209,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // ✅ AppBar সরানো হয়েছে
       body: SafeArea(
         child: _isLoading
             ? const Center(
@@ -243,22 +242,22 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ✅ হেডার (গ্যাভেল ইমেজসহ ডিজাইনের মতো)
+  // ✅ হেডার (গ্যাভেল ইমেজসহ)
   Widget _buildHeader() {
     return Stack(
       clipBehavior: Clip.none,
       children: [
         // গ্যাভেল ইমেজ (ডানদিকে, ব্লেন্ড করা)
         Positioned(
-          right: -20,
-          top: -20,
+          right: -15, // ✅ ডানদিকে একটু বাইরে
+          top: -15,
           child: ShaderMask(
             shaderCallback: (rect) {
               return const LinearGradient(
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,
-                colors: [Colors.transparent, Colors.black], // বাম থেকে ডানে ফেড
-                stops: [0.4, 1.0],
+                colors: [Colors.transparent, Colors.black],
+                stops: [0.1, 0.7], // ✅ বাম দিকে বেশি ভিজিবল
               ).createShader(rect);
             },
             blendMode: BlendMode.dstIn,
@@ -330,7 +329,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ✅ মোট মামলা কার্ড (ডিজাইনের মতো)
+  // ✅ মোট মামলা কার্ড
   Widget _buildTotalCasesCard() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -388,6 +387,20 @@ class _HomeScreenState extends State<HomeScreen> {
                         label: 'নিষ্পত্তি',
                         count: _disposedCases,
                         color: Colors.blueAccent),
+                    const Spacer(),
+                    // ✅ ক্লায়েন্ট সংখ্যা
+                    Row(
+                      children: [
+                        const Icon(Icons.people_alt,
+                            color: Colors.blueAccent, size: 16),
+                        const SizedBox(width: 4),
+                        Text('$_clientCount',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold)),
+                      ],
+                    ),
                   ],
                 ),
               ],
@@ -426,57 +439,71 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFFE5B25D))),
+                    color: Colors.white)),
+            // ✅ "সব দেখুন" এর পাশে অ্যারো যোগ করা হলো
             TextButton(
-                onPressed: () {},
-                child: const Text('সব দেখুন',
-                    style: TextStyle(color: Color(0xFFE5B25D), fontSize: 13))),
+              onPressed: () {},
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Text('সব দেখুন',
+                      style: TextStyle(color: Color(0xFFE5B25D), fontSize: 13)),
+                  SizedBox(width: 4),
+                  Icon(Icons.arrow_forward_ios,
+                      color: Color(0xFFE5B25D), size: 12),
+                ],
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 10),
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            _buildQuickActionItem(
-                icon: Icons.add_circle_outline,
-                label: 'নতুন মামলা\nযোগ করুন',
-                onTap: () async {
-                  await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const CaseListScreen()));
-                  if (mounted) {
-                    _fetchStats();
-                    _fetchRecentCases();
-                  }
-                }),
-            _buildQuickActionItem(
-                icon: Icons.folder_open,
-                label: 'আমার মামলা\nসমূহ',
-                onTap: () async {
-                  await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const CaseListScreen()));
-                  if (mounted) {
-                    _fetchStats();
-                    _fetchRecentCases();
-                  }
-                }),
-            _buildQuickActionItem(
-                icon: Icons.calendar_month,
-                label: 'শুনানির তারিখ\nও সময়',
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text('ক্যালেন্ডার স্ক্রিন শীঘ্রই আসছে')));
-                }),
-            _buildQuickActionItem(
-                icon: Icons.menu_book,
-                label: 'আইনকোষ /\nপ্রোফাইল',
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('আইনকোষ শীঘ্রই আসছে')));
-                }),
+            Expanded(
+                child: _buildQuickActionItem(
+                    icon: Icons.add_circle_outline,
+                    label: 'নতুন মামলা\nযোগ করুন',
+                    onTap: () async {
+                      await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const CaseListScreen()));
+                      if (mounted) {
+                        _fetchStats();
+                        _fetchRecentCases();
+                      }
+                    })),
+            Expanded(
+                child: _buildQuickActionItem(
+                    icon: Icons.folder_open,
+                    label: 'আমার মামলা\nসমূহ',
+                    onTap: () async {
+                      await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const CaseListScreen()));
+                      if (mounted) {
+                        _fetchStats();
+                        _fetchRecentCases();
+                      }
+                    })),
+            Expanded(
+                child: _buildQuickActionItem(
+                    icon: Icons.calendar_month,
+                    label: 'শুনানির তারিখ\nও সময়',
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text('ক্যালেন্ডার স্ক্রিন শীঘ্রই আসছে')));
+                    })),
+            Expanded(
+                child: _buildQuickActionItem(
+                    icon: Icons.menu_book,
+                    label: 'আইনকোষ /\nপ্রোফাইল',
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('আইনকোষ শীঘ্রই আসছে')));
+                    })),
           ],
         ),
       ],
@@ -491,7 +518,6 @@ class _HomeScreenState extends State<HomeScreen> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        width: 75,
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
         child: Column(
           children: [
@@ -526,7 +552,7 @@ class _HomeScreenState extends State<HomeScreen> {
               style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFFE5B25D))),
+                  color: Colors.white)),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(20),
@@ -552,20 +578,28 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFFE5B25D))),
+                    color: Colors.white)),
+            // ✅ "সব দেখুন" এর পাশে অ্যারো যোগ করা হলো
             TextButton(
-                onPressed: () async {
-                  await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const CaseListScreen()));
-                  if (mounted) {
-                    _fetchStats();
-                    _fetchRecentCases();
-                  }
-                },
-                child: const Text('সব দেখুন',
-                    style: TextStyle(color: Color(0xFFE5B25D), fontSize: 13))),
+              onPressed: () async {
+                await Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const CaseListScreen()));
+                if (mounted) {
+                  _fetchStats();
+                  _fetchRecentCases();
+                }
+              },
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Text('সব দেখুন',
+                      style: TextStyle(color: Color(0xFFE5B25D), fontSize: 13)),
+                  SizedBox(width: 4),
+                  Icon(Icons.arrow_forward_ios,
+                      color: Color(0xFFE5B25D), size: 12),
+                ],
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 8),
@@ -576,7 +610,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ✅ কেস কার্ড (ডিজাইনের মতো বিস্তারিত)
+  // ✅ কেস কার্ড (ক্লিকেবল)
   Widget _buildCaseCard(Map<String, dynamic> caseData) {
     final caseType = caseData['case_type'] ?? 'অন্যান্য';
     final caseNumber = caseData['case_number'] ?? '';
@@ -589,90 +623,115 @@ class _HomeScreenState extends State<HomeScreen> {
     final statusLabel = _getStatusLabel(status);
     final statusColor = _getStatusColor(status);
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0F2C3E),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-                color: iconColor.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(10)),
-            child: Icon(icon, color: iconColor, size: 22),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                        child: Text('$caseType মামলা নং $caseNumber',
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold),
-                            overflow: TextOverflow.ellipsis)),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                          color: statusColor.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(6)),
-                      child: Text(statusLabel,
-                          style: TextStyle(
-                              color: statusColor,
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Icon(Icons.location_city,
-                        color: Colors.white38, size: 11),
-                    const SizedBox(width: 3),
-                    Expanded(
-                        child: Text(courtName,
-                            style: const TextStyle(
-                                color: Colors.white54, fontSize: 10),
-                            overflow: TextOverflow.ellipsis)),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    const Icon(Icons.calendar_today,
-                        color: Colors.white38, size: 11),
-                    const SizedBox(width: 3),
-                    Text('শুনানির তারিখ: ${_formatDate(nextHearing)}',
-                        style: const TextStyle(
-                            color: Colors.white54, fontSize: 10)),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    const Icon(Icons.access_time,
-                        color: Colors.white38, size: 11),
-                    const SizedBox(width: 3),
-                    Text('সময়: ${_formatTime(nextHearing)}',
-                        style: const TextStyle(
-                            color: Colors.white54, fontSize: 10)),
-                  ],
-                ),
-              ],
+    // ✅ InkWell দিয়ে মুড়ে onTap যোগ করা হলো
+    return InkWell(
+      onTap: () async {
+        // ডেটাবেস থেকে সম্পূর্ণ কেস ডেটা (client_id সহ) নিয়ে আসি
+        final fullCaseData = await Supabase.instance.client
+            .from('cases')
+            .select()
+            .eq('id', caseData['id'])
+            .maybeSingle();
+
+        if (fullCaseData != null && mounted) {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => CaseDetailScreen(caseData: fullCaseData),
             ),
-          ),
-          const Icon(Icons.arrow_forward_ios, color: Colors.white38, size: 12),
-        ],
+          );
+          // ফিরে আসার পর হোম স্ক্রিন রিফ্রেশ
+          _fetchStats();
+          _fetchRecentCases();
+        }
+      },
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F2C3E),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10)),
+              child: Icon(icon, color: iconColor, size: 22),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                          child: Text('$caseType মামলা নং $caseNumber',
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold),
+                              overflow: TextOverflow.ellipsis)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                            color: statusColor.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(6)),
+                        child: Text(statusLabel,
+                            style: TextStyle(
+                                color: statusColor,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(Icons.location_city,
+                          color: Colors.white38, size: 11),
+                      const SizedBox(width: 3),
+                      Expanded(
+                          child: Text(courtName,
+                              style: const TextStyle(
+                                  color: Colors.white54, fontSize: 10),
+                              overflow: TextOverflow.ellipsis)),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      const Icon(Icons.calendar_today,
+                          color: Colors.white38, size: 11),
+                      const SizedBox(width: 3),
+                      Text('শুনানির তারিখ: ${_formatDate(nextHearing)}',
+                          style: const TextStyle(
+                              color: Colors.white54, fontSize: 10)),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      const Icon(Icons.access_time,
+                          color: Colors.white38, size: 11),
+                      const SizedBox(width: 3),
+                      Text('সময়: ${_formatTime(nextHearing)}',
+                          style: const TextStyle(
+                              color: Colors.white54, fontSize: 10)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios,
+                color: Colors.white38, size: 12),
+          ],
+        ),
       ),
     );
   }
