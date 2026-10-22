@@ -1,7 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'case_list_screen.dart';
-import 'case_detail_screen.dart'; // ✅ নতুন ইমপোর্ট
+import 'case_detail_screen.dart';
+
+// ───────────────────────── Design tokens ─────────────────────────
+class _C {
+  static const gold = Color(0xFFE5B25D);
+  static const bgTop = Color(0xFF0A4558);
+  static const bgBottom = Color(0xFF052C3A);
+  static const card = Color(0xFF0E4A5C);
+  static const cardBorder = Color(0xFF1F6B7E);
+  static const iconCircle = Color(0xFF3B6D7B);
+  static const navBg = Color(0xFF0A3B4C);
+}
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -13,7 +24,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _supabase = Supabase.instance.client;
 
-  int _clientCount = 0;
   int _totalCases = 0;
   int _activeCases = 0;
   int _disposedCases = 0;
@@ -28,10 +38,14 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchStats();
-    _fetchRecentCases();
+    _loadAll();
   }
 
+  Future<void> _loadAll() async {
+    await Future.wait([_fetchStats(), _fetchRecentCases()]);
+  }
+
+  // ───────────────────────── Data ─────────────────────────
   Future<void> _fetchStats() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
@@ -43,9 +57,6 @@ class _HomeScreenState extends State<HomeScreen> {
             .select('full_name, address')
             .eq('id', userId)
             .maybeSingle();
-
-        final clientsResp =
-            await _supabase.from('clients').select('id').eq('user_id', userId);
 
         final activeResp = await _supabase
             .from('cases')
@@ -61,7 +72,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
         if (mounted) {
           setState(() {
-            _clientCount = (clientsResp as List).length;
             _activeCases = (activeResp as List).length;
             _disposedCases = (disposedResp as List).length;
             _totalCases = _activeCases + _disposedCases;
@@ -74,7 +84,7 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
     } catch (e) {
-      debugPrint("Error fetching stats: $e");
+      debugPrint('Error fetching stats: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -93,15 +103,19 @@ class _HomeScreenState extends State<HomeScreen> {
             .limit(3);
 
         if (mounted) {
-          setState(() {
-            _recentCases = List<Map<String, dynamic>>.from(resp);
-          });
+          setState(() => _recentCases = List<Map<String, dynamic>>.from(resp));
         }
       }
     } catch (e) {
-      debugPrint("Error fetching recent cases: $e");
+      debugPrint('Error fetching recent cases: $e');
     }
   }
+
+  // ───────────────────────── Helpers ─────────────────────────
+  /// Converts any 0-9 digits to Bengali digits (১২৩...)
+  String _bn(Object? v) => (v ?? '')
+      .toString()
+      .replaceAllMapped(RegExp(r'\d'), (m) => '০১২৩৪৫৬৭৮৯'[int.parse(m[0]!)]);
 
   String _getBengaliMonth(int month) {
     const months = [
@@ -125,50 +139,65 @@ class _HomeScreenState extends State<HomeScreen> {
     if (isoDate == null || isoDate.isEmpty) return 'নির্ধারিত হয়নি';
     try {
       final dt = DateTime.parse(isoDate).toLocal();
-      return '${dt.day} ${_getBengaliMonth(dt.month)} ${dt.year}';
+      return _bn('${dt.day} ${_getBengaliMonth(dt.month)} ${dt.year}');
     } catch (_) {
       return 'নির্ধারিত হয়নি';
     }
   }
 
+  /// e.g. "সকাল ১০:০০টা", "দুপুর ২:৩০টা"
   String _formatTime(String? isoDate) {
-    if (isoDate == null || isoDate.isEmpty) return '';
+    if (isoDate == null || isoDate.isEmpty) return 'নির্ধারিত হয়নি';
     try {
       final dt = DateTime.parse(isoDate).toLocal();
-      final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
-      return '${hour}:${dt.minute.toString().padLeft(2, '0')}';
+      final h = dt.hour;
+      final hour12 = h % 12 == 0 ? 12 : h % 12;
+
+      String period;
+      if (h >= 4 && h < 12) {
+        period = 'সকাল';
+      } else if (h >= 12 && h < 16) {
+        period = 'দুপুর';
+      } else if (h >= 16 && h < 18) {
+        period = 'বিকাল';
+      } else if (h >= 18 && h < 20) {
+        period = 'সন্ধ্যা';
+      } else {
+        period = 'রাত';
+      }
+      return '$period ${_bn(hour12)}:${_bn(dt.minute.toString().padLeft(2, '0'))}টা';
     } catch (_) {
-      return '';
+      return 'নির্ধারিত হয়নি';
     }
   }
 
   IconData _getCaseIcon(String caseType) {
     switch (caseType) {
       case 'দেওয়ানি':
-        return Icons.description;
+        return Icons.insert_drive_file_rounded;
       case 'ফৌজদারি':
-        return Icons.gavel;
+        return Icons.gavel_rounded;
       case 'পারিবারিক':
         return Icons.family_restroom;
       case 'জমি সংক্রান্ত':
-        return Icons.landscape;
+        return Icons.library_books_rounded;
       default:
-        return Icons.folder;
+        return Icons.folder_rounded;
     }
   }
 
   Color _getCaseColor(String caseType) {
     switch (caseType) {
       case 'দেওয়ানি':
-        return Colors.orangeAccent;
+        return const Color(0xFFF4A6A0);
       case 'ফৌজদারি':
-        return Colors.redAccent;
+        return Colors.white;
       case 'পারিবারিক':
-        return Colors.purpleAccent;
+        return const Color(0xFFD7B8F5);
       case 'জমি সংক্রান্ত':
-        return Colors.greenAccent;
+        return const Color(0xFFCFE3E8);
       default:
-        return const Color(0xFFE5B25D);
+        return _C.gold;
     }
   }
 
@@ -189,218 +218,260 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Color _getStatusColor(String status) {
+  /// (background, text, border)
+  (Color, Color, Color) _getStatusStyle(String status) {
     switch (status) {
       case 'Active':
-        return Colors.redAccent;
+        return (
+          const Color(0xFFFFE1E1),
+          const Color(0xFFD32F2F),
+          const Color(0xFFE57373)
+        );
       case 'Pending':
-        return Colors.orangeAccent;
+        return (
+          const Color(0xFFFFF0B8),
+          const Color(0xFF8A6A00),
+          const Color(0xFFE5C04B)
+        );
       case 'Disposed':
-        return Colors.greenAccent;
-      case 'Closed':
-        return Colors.grey;
+        return (
+          const Color(0xFFCDEBD0),
+          const Color(0xFF2E7D32),
+          const Color(0xFF81C784)
+        );
       case 'Appealed':
-        return Colors.blueAccent;
+        return (
+          const Color(0xFFD6E6FF),
+          const Color(0xFF1E5CB3),
+          const Color(0xFF7FAEF0)
+        );
       default:
-        return Colors.white54;
+        return (
+          const Color(0xFFE0E0E0),
+          const Color(0xFF616161),
+          const Color(0xFFBDBDBD)
+        );
     }
   }
 
+  Future<void> _openCaseList() async {
+    await Navigator.push(
+        context, MaterialPageRoute(builder: (_) => const CaseListScreen()));
+    if (mounted) _loadAll();
+  }
+
+  void _soon(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  // ───────────────────────── Build ─────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: _isLoading
-            ? const Center(
-                child: CircularProgressIndicator(color: Color(0xFFE5B25D)))
-            : RefreshIndicator(
-                onRefresh: () async {
-                  await _fetchStats();
-                  await _fetchRecentCases();
-                },
-                color: const Color(0xFFE5B25D),
-                child: SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 10),
-                      _buildHeader(),
-                      const SizedBox(height: 20),
-                      _buildTotalCasesCard(),
-                      const SizedBox(height: 24),
-                      _buildQuickActions(),
-                      const SizedBox(height: 24),
-                      _buildRecentCases(),
-                      const SizedBox(height: 20),
-                    ],
+      backgroundColor: _C.bgBottom,
+      bottomNavigationBar: HomeBottomNav(
+        currentIndex: 0,
+        onTap: (i) {
+          switch (i) {
+            case 1:
+              _openCaseList();
+              break;
+            case 2:
+              _soon('ক্যালেন্ডার স্ক্রিন শীঘ্রই আসছে');
+              break;
+            case 3:
+              _soon('প্রোফাইল শীঘ্রই আসছে');
+              break;
+          }
+        },
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [_C.bgTop, _C.bgBottom],
+          ),
+        ),
+        child: SafeArea(
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator(color: _C.gold))
+              : RefreshIndicator(
+                  onRefresh: _loadAll,
+                  color: _C.gold,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildHeader(),
+                        const SizedBox(height: 18),
+                        _buildTotalCasesCard(),
+                        const SizedBox(height: 26),
+                        _buildQuickActions(),
+                        const SizedBox(height: 22),
+                        _buildRecentCases(),
+                      ],
+                    ),
                   ),
                 ),
-              ),
+        ),
       ),
     );
   }
 
-  // ✅ হেডার (গ্যাভেল ইমেজসহ)
+  // ───────────────────────── Header ─────────────────────────
   Widget _buildHeader() {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        // গ্যাভেল ইমেজ (ডানদিকে, ব্লেন্ড করা)
-        Positioned(
-          right: -15, // ✅ ডানদিকে একটু বাইরে
-          top: -15,
-          child: ShaderMask(
-            shaderCallback: (rect) {
-              return const LinearGradient(
+    return SizedBox(
+      height: 80,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            right: -16,
+            top: -16,
+            child: ShaderMask(
+              shaderCallback: (rect) => const LinearGradient(
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,
                 colors: [Colors.transparent, Colors.black],
-                stops: [0.1, 0.7], // ✅ বাম দিকে বেশি ভিজিবল
-              ).createShader(rect);
-            },
-            blendMode: BlendMode.dstIn,
-            child: Image.asset(
-              'assets/images/home_bg.png',
-              height: 110,
-              fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => const SizedBox(),
-            ),
-          ),
-        ),
-        // প্রোফাইল ইনফো
-        Row(
-          children: [
-            CircleAvatar(
-              radius: 30,
-              backgroundColor: const Color(0xFF07384A),
-              child: _avatarUrl != null
-                  ? ClipOval(
-                      child: Image.network(
-                        _avatarUrl!,
-                        width: 60,
-                        height: 60,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const Icon(Icons.person,
-                            color: Color(0xFFE5B25D), size: 34),
-                      ),
-                    )
-                  : const Icon(Icons.person,
-                      color: Color(0xFFE5B25D), size: 34),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'স্বাগতম, $_userName',
-                    style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Icon(Icons.location_on,
-                          color: Color(0xFFE5B25D), size: 14),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          _userAddress.isNotEmpty
-                              ? _userAddress
-                              : 'ঠিকানা যোগ করুন',
-                          style: const TextStyle(
-                              color: Colors.white70, fontSize: 12),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                stops: [0.1, 0.7],
+              ).createShader(rect),
+              blendMode: BlendMode.dstIn,
+              child: Image.asset(
+                'assets/images/home_bg.png',
+                height: 115,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const SizedBox(),
               ),
             ),
-          ],
-        ),
-      ],
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: _C.gold.withValues(alpha: 0.6)),
+                  ),
+                  child: CircleAvatar(
+                    radius: 28,
+                    backgroundColor: const Color(0xFF07384A),
+                    backgroundImage:
+                        _avatarUrl != null ? NetworkImage(_avatarUrl!) : null,
+                    child: _avatarUrl == null
+                        ? const Icon(Icons.person, color: _C.gold, size: 32)
+                        : null,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 90),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'স্বাগতম, $_userName',
+                          style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(Icons.location_on_outlined,
+                                color: _C.gold, size: 14),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                _userAddress.isNotEmpty
+                                    ? _userAddress
+                                    : 'ঠিকানা যোগ করুন',
+                                style: const TextStyle(
+                                    color: Colors.white70, fontSize: 12),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  // ✅ মোট মামলা কার্ড
+  // ───────────────────────── Total cases card ─────────────────────────
   Widget _buildTotalCasesCard() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F2C3E),
+        color: _C.bgTop.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE5B25D), width: 1.5),
+        border: Border.all(color: _C.gold, width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFE5B25D).withValues(alpha: 0.15),
+            color: _C.gold.withValues(alpha: 0.18),
             blurRadius: 10,
             spreadRadius: 1,
-            offset: const Offset(0, 0),
           ),
         ],
       ),
       child: Row(
         children: [
-          // আইকন
           Container(
-            padding: const EdgeInsets.all(12),
+            width: 52,
+            height: 52,
             decoration: BoxDecoration(
-              color: const Color(0xFFE5B25D).withValues(alpha: 0.15),
+              color: _C.iconCircle.withValues(alpha: 0.6),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.folder_special,
-                color: Color(0xFFE5B25D), size: 28),
+            child: const Icon(Icons.description_outlined,
+                color: _C.gold, size: 28),
           ),
-          const SizedBox(width: 16),
-          // তথ্য
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text('মোট মামলা',
                     style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white70)),
-                const SizedBox(height: 4),
-                Text('$_totalCases টি',
-                    style: const TextStyle(
-                        fontSize: 28,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFFE5B25D))),
-                const SizedBox(height: 8),
+                        color: Colors.white)),
+                const SizedBox(height: 2),
+                Text('${_bn(_totalCases)}টি',
+                    style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: _C.gold)),
+                const SizedBox(height: 4),
                 Row(
                   children: [
-                    _buildStatusChip(
-                        label: 'চলমান',
-                        count: _activeCases,
-                        color: Colors.greenAccent),
-                    const SizedBox(width: 16),
-                    _buildStatusChip(
-                        label: 'নিষ্পত্তি',
-                        count: _disposedCases,
-                        color: Colors.blueAccent),
-                    const Spacer(),
-                    // ✅ ক্লায়েন্ট সংখ্যা
-                    Row(
-                      children: [
-                        const Icon(Icons.people_alt,
-                            color: Colors.blueAccent, size: 16),
-                        const SizedBox(width: 4),
-                        Text('$_clientCount',
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold)),
-                      ],
+                    Text('চলমান: ${_bn(_activeCases)}টি',
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 12)),
+                    Container(
+                      width: 1,
+                      height: 12,
+                      margin: const EdgeInsets.symmetric(horizontal: 10),
+                      color: Colors.white38,
                     ),
+                    Text('নিষ্পত্তি: ${_bn(_disposedCases)}টি',
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 12)),
                   ],
                 ),
               ],
@@ -411,223 +482,150 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildStatusChip(
-      {required String label, required int count, required Color color}) {
+  // ───────────────────────── Section header ─────────────────────────
+  Widget _sectionHeader(String title, VoidCallback onSeeAll) {
     return Row(
-      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-        const SizedBox(width: 6),
-        Text('$label: $count টি',
-            style: const TextStyle(color: Colors.white70, fontSize: 12)),
+        Text(title,
+            style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.white)),
+        InkWell(
+          onTap: onSeeAll,
+          borderRadius: BorderRadius.circular(8),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('সব দেখুন',
+                    style: TextStyle(
+                        color: _C.gold,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600)),
+                SizedBox(width: 6),
+                Icon(Icons.arrow_forward_ios, color: _C.gold, size: 12),
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }
 
-  // ✅ দ্রুত সেবা (৪টি আইকন)
+  // ───────────────────────── Quick actions ─────────────────────────
   Widget _buildQuickActions() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _sectionHeader('দ্রুত সেবা', () => _soon('শীঘ্রই আসছে')),
+        const SizedBox(height: 12),
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('দ্রুত সেবা',
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white)),
-            // ✅ "সব দেখুন" এর পাশে অ্যারো যোগ করা হলো
-            TextButton(
-              onPressed: () {},
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Text('সব দেখুন',
-                      style: TextStyle(color: Color(0xFFE5B25D), fontSize: 13)),
-                  SizedBox(width: 4),
-                  Icon(Icons.arrow_forward_ios,
-                      color: Color(0xFFE5B25D), size: 12),
-                ],
-              ),
+            _quickItem(
+              icon: Icons.note_add_outlined,
+              label: 'নতুন মামলা\nযোগ করুন',
+              onTap: _openCaseList,
             ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-                child: _buildQuickActionItem(
-                    icon: Icons.add_circle_outline,
-                    label: 'নতুন মামলা\nযোগ করুন',
-                    onTap: () async {
-                      await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => const CaseListScreen()));
-                      if (mounted) {
-                        _fetchStats();
-                        _fetchRecentCases();
-                      }
-                    })),
-            Expanded(
-                child: _buildQuickActionItem(
-                    icon: Icons.folder_open,
-                    label: 'আমার মামলা\nসমূহ',
-                    onTap: () async {
-                      await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => const CaseListScreen()));
-                      if (mounted) {
-                        _fetchStats();
-                        _fetchRecentCases();
-                      }
-                    })),
-            Expanded(
-                child: _buildQuickActionItem(
-                    icon: Icons.calendar_month,
-                    label: 'শুনানির তারিখ\nও সময়',
-                    onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                          content: Text('ক্যালেন্ডার স্ক্রিন শীঘ্রই আসছে')));
-                    })),
-            Expanded(
-                child: _buildQuickActionItem(
-                    icon: Icons.menu_book,
-                    label: 'আইনকোষ /\nপ্রোফাইল',
-                    onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('আইনকোষ শীঘ্রই আসছে')));
-                    })),
+            _quickItem(
+              icon: Icons.folder_copy_outlined,
+              label: 'আমার মামলা\nসমূহ',
+              onTap: _openCaseList,
+            ),
+            _quickItem(
+              icon: Icons.edit_calendar_outlined,
+              label: 'শুনানির তারিখ\nও সময়',
+              onTap: () => _soon('ক্যালেন্ডার স্ক্রিন শীঘ্রই আসছে'),
+            ),
+            _quickItem(
+              icon: Icons.people_outline_rounded,
+              label: 'আইনজীবী\nপ্রোফাইল',
+              onTap: () => _soon('প্রোফাইল শীঘ্রই আসছে'),
+            ),
           ],
         ),
       ],
     );
   }
 
-  Widget _buildQuickActionItem(
+  Widget _quickItem(
       {required IconData icon,
       required String label,
       required VoidCallback onTap}) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
         child: Column(
           children: [
             Container(
-              padding: const EdgeInsets.all(12),
+              width: 56,
+              height: 56,
               decoration: BoxDecoration(
-                color: const Color(0xFF0F2C3E),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                    color: const Color(0xFFE5B25D).withValues(alpha: 0.3)),
+                color: _C.card.withValues(alpha: 0.8),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: _C.cardBorder),
               ),
-              child: Icon(icon, color: const Color(0xFFE5B25D), size: 24),
+              child: Icon(icon, color: _C.gold, size: 26),
             ),
             const SizedBox(height: 8),
             Text(label,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                    color: Colors.white70, fontSize: 11, height: 1.3)),
+                    color: Colors.white,
+                    fontSize: 11,
+                    height: 1.3,
+                    fontWeight: FontWeight.w500)),
           ],
         ),
       ),
     );
   }
 
-  // ✅ সাম্প্রতিক মামলা
+  // ───────────────────────── Recent cases ─────────────────────────
   Widget _buildRecentCases() {
-    if (_recentCases.isEmpty) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('সাম্প্রতিক মামলা',
-              style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white)),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-                color: const Color(0xFF0F2C3E),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white12)),
-            child: const Center(
-                child: Text('এখনো কোনো মামলা যোগ করা হয়নি',
-                    style: TextStyle(color: Colors.white54, fontSize: 13))),
-          ),
-        ],
-      );
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text('সাম্প্রতিক মামলা',
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white)),
-            // ✅ "সব দেখুন" এর পাশে অ্যারো যোগ করা হলো
-            TextButton(
-              onPressed: () async {
-                await Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const CaseListScreen()));
-                if (mounted) {
-                  _fetchStats();
-                  _fetchRecentCases();
-                }
-              },
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Text('সব দেখুন',
-                      style: TextStyle(color: Color(0xFFE5B25D), fontSize: 13)),
-                  SizedBox(width: 4),
-                  Icon(Icons.arrow_forward_ios,
-                      color: Color(0xFFE5B25D), size: 12),
-                ],
-              ),
+        _sectionHeader('সাম্প্রতিক মামলা', _openCaseList),
+        const SizedBox(height: 10),
+        if (_recentCases.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: _C.card,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _C.cardBorder),
             ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        ..._recentCases.map((caseData) => Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _buildCaseCard(caseData))),
+            child: const Center(
+              child: Text('এখনো কোনো মামলা যোগ করা হয়নি',
+                  style: TextStyle(color: Colors.white54, fontSize: 13)),
+            ),
+          )
+        else
+          ..._recentCases.map((c) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _buildCaseCard(c),
+              )),
       ],
     );
   }
 
-  // ✅ কেস কার্ড (ক্লিকেবল)
   Widget _buildCaseCard(Map<String, dynamic> caseData) {
     final caseType = caseData['case_type'] ?? 'অন্যান্য';
-    final caseNumber = caseData['case_number'] ?? '';
+    final caseNumber = _bn(caseData['case_number'] ?? '');
     final courtName = caseData['court_name'] ?? '';
     final nextHearing = caseData['next_hearing_date'];
     final status = caseData['status'] ?? 'Active';
 
-    final icon = _getCaseIcon(caseType);
-    final iconColor = _getCaseColor(caseType);
-    final statusLabel = _getStatusLabel(status);
-    final statusColor = _getStatusColor(status);
+    final (badgeBg, badgeText, badgeBorder) = _getStatusStyle(status);
 
-    // ✅ InkWell দিয়ে মুড়ে onTap যোগ করা হলো
     return InkWell(
       onTap: () async {
-        // ডেটাবেস থেকে সম্পূর্ণ কেস ডেটা (client_id সহ) নিয়ে আসি
-        final fullCaseData = await Supabase.instance.client
+        final fullCaseData = await _supabase
             .from('cases')
             .select()
             .eq('id', caseData['id'])
@@ -637,32 +635,30 @@ class _HomeScreenState extends State<HomeScreen> {
           await Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => CaseDetailScreen(caseData: fullCaseData),
-            ),
+                builder: (_) => CaseDetailScreen(caseData: fullCaseData)),
           );
-          // ফিরে আসার পর হোম স্ক্রিন রিফ্রেশ
-          _fetchStats();
-          _fetchRecentCases();
+          if (mounted) _loadAll();
         }
       },
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(16),
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
         decoration: BoxDecoration(
-          color: const Color(0xFF0F2C3E),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white12),
+          color: _C.card.withValues(alpha: 0.85),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _C.cardBorder),
         ),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                  color: iconColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10)),
-              child: Icon(icon, color: iconColor, size: 22),
+              width: 50,
+              height: 50,
+              decoration: const BoxDecoration(
+                  color: _C.iconCircle, shape: BoxShape.circle),
+              child: Icon(_getCaseIcon(caseType),
+                  color: _getCaseColor(caseType), size: 24),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -670,67 +666,117 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     children: [
                       Expanded(
-                          child: Text('$caseType মামলা নং $caseNumber',
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold),
-                              overflow: TextOverflow.ellipsis)),
+                        child: Text('$caseType মামলা নং $caseNumber',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                      const SizedBox(width: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
+                            horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                            color: statusColor.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(6)),
-                        child: Text(statusLabel,
+                          color: badgeBg,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: badgeBorder),
+                        ),
+                        child: Text(_getStatusLabel(status),
                             style: TextStyle(
-                                color: statusColor,
-                                fontSize: 9,
+                                color: badgeText,
+                                fontSize: 10,
                                 fontWeight: FontWeight.bold)),
                       ),
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Icon(Icons.location_city,
-                          color: Colors.white38, size: 11),
-                      const SizedBox(width: 3),
-                      Expanded(
-                          child: Text(courtName,
-                              style: const TextStyle(
-                                  color: Colors.white54, fontSize: 10),
-                              overflow: TextOverflow.ellipsis)),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      const Icon(Icons.calendar_today,
-                          color: Colors.white38, size: 11),
-                      const SizedBox(width: 3),
-                      Text('শুনানির তারিখ: ${_formatDate(nextHearing)}',
-                          style: const TextStyle(
-                              color: Colors.white54, fontSize: 10)),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      const Icon(Icons.access_time,
-                          color: Colors.white38, size: 11),
-                      const SizedBox(width: 3),
-                      Text('সময়: ${_formatTime(nextHearing)}',
-                          style: const TextStyle(
-                              color: Colors.white54, fontSize: 10)),
-                    ],
-                  ),
+                  Text(courtName,
+                      style:
+                          const TextStyle(color: Colors.white70, fontSize: 12),
+                      overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 4),
+                  _infoRow(Icons.calendar_month_outlined,
+                      'শুনানির তারিখ: ${_formatDate(nextHearing)}'),
+                  const SizedBox(height: 3),
+                  _infoRow(Icons.access_time, _formatTime(nextHearing)),
                 ],
               ),
             ),
-            const Icon(Icons.arrow_forward_ios,
-                color: Colors.white38, size: 12),
+            const SizedBox(width: 6),
+            const Icon(Icons.arrow_forward_ios, color: _C.gold, size: 14),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _infoRow(IconData icon, String text) {
+    return Row(
+      children: [
+        Icon(icon, color: Colors.white60, size: 13),
+        const SizedBox(width: 5),
+        Expanded(
+          child: Text(text,
+              style: const TextStyle(color: Colors.white70, fontSize: 11.5),
+              overflow: TextOverflow.ellipsis),
+        ),
+      ],
+    );
+  }
+}
+
+// ───────────────────────── Bottom navigation ─────────────────────────
+class HomeBottomNav extends StatelessWidget {
+  final int currentIndex;
+  final ValueChanged<int> onTap;
+
+  const HomeBottomNav(
+      {super.key, required this.currentIndex, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    const items = [
+      (Icons.home_rounded, 'হোম'),
+      (Icons.folder_open_rounded, 'মামলাসমূহ'),
+      (Icons.calendar_month_outlined, 'ক্যালেন্ডার'),
+      (Icons.person_outline_rounded, 'প্রোফাইল'),
+    ];
+
+    return SafeArea(
+      top: false,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: _C.navBg,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _C.gold.withValues(alpha: 0.6)),
+        ),
+        child: Row(
+          children: List.generate(items.length, (i) {
+            final selected = i == currentIndex;
+            final color = selected ? _C.gold : Colors.white;
+            return Expanded(
+              child: InkWell(
+                onTap: () => onTap(i),
+                borderRadius: BorderRadius.circular(12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(items[i].$1, color: color, size: 26),
+                    const SizedBox(height: 2),
+                    Text(items[i].$2,
+                        style: TextStyle(
+                            color: color,
+                            fontSize: 11,
+                            fontWeight:
+                                selected ? FontWeight.bold : FontWeight.w500)),
+                  ],
+                ),
+              ),
+            );
+          }),
         ),
       ),
     );
